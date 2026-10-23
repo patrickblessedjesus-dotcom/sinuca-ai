@@ -57,7 +57,8 @@ const app = createApp({
           authToken: config.twilioAuthToken,
           publicUrl: config.twilioPublicUrl,
           allowedNumbers: config.allowedNumbers,
-          onMessage: (msg) => handleMessage(msg, { whatsapp: twilioClient, coach }),
+          client: twilioClient,
+          handle: (msg, wa) => handleMessage(msg, { whatsapp: wa, coach }),
         };
       })()
     : undefined,

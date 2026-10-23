@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import type { IncomingMessage } from '../handler.js';
 import { Deduplicator } from '../services/dedup.js';
 import { validTwilioSignature } from '../services/twilio.js';
+import type { WhatsAppClient } from '../services/whatsapp.js';
 import { errorInfo, logger, maskPhone } from '../utils/logger.js';
 import { isAllowed } from './webhook.js';
 
@@ -11,10 +12,22 @@ export interface TwilioWebhookOptions {
   publicUrl?: string;
   allowedNumbers: string[];
   dedup?: Deduplicator;
-  onMessage: (msg: IncomingMessage) => Promise<void>;
+  /** Cliente real da Twilio (usado só se a resposta não couber no tempo do webhook). */
+  client: WhatsAppClient;
+  /** Processa a mensagem enviando as respostas pelo cliente recebido. */
+  handle: (msg: IncomingMessage, wa: WhatsAppClient) => Promise<void>;
+  /** Tempo máximo para responder dentro do próprio webhook (a Twilio espera até ~15 s). */
+  replyBudgetMs?: number;
 }
 
-const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function twiml(messages: string[]): string {
+  return '<?xml version="1.0" encoding="UTF-8"?><Response>' + messages.map((m) => `<Message>${escapeXml(m)}</Message>`).join('') + '</Response>';
+}
+
 
 /** Converte o POST da Twilio numa mensagem interna. Retorna null se faltar algo essencial. */
 export function parseTwilioMessage(p: Record<string, string>): IncomingMessage | null {
@@ -48,23 +61,50 @@ export function createTwilioRouter(opts: TwilioWebhookOptions): Router {
       return;
     }
 
-    // Responde na hora (TwiML vazio) e envia a resposta depois pela API.
-    res.type('text/xml').send(EMPTY_TWIML);
-
-    let msg: IncomingMessage | null;
+    let msg: IncomingMessage | null = null;
     try {
       msg = parseTwilioMessage(params);
     } catch (err) {
       logger.error('Payload inesperado da Twilio', errorInfo(err));
+    }
+    if (!msg || !dedup.firstTime(msg.id)) {
+      res.type('text/xml').send(twiml([]));
       return;
     }
-    if (!msg || !dedup.firstTime(msg.id)) return;
     if (!isAllowed(msg.from, opts.allowedNumbers)) {
       logger.warn('Remetente fora de ALLOWED_NUMBERS ignorado', { from: maskPhone(msg.from) });
+      res.type('text/xml').send(twiml([]));
       return;
     }
     logger.info('Mensagem recebida (Twilio)', { from: maskPhone(msg.from), type: msg.type });
-    opts.onMessage(msg).catch((err) => logger.error('Erro ao processar mensagem', errorInfo(err)));
+
+    // As respostas vão no próprio retorno do webhook (TwiML), que não exige template.
+    // Se o processamento passar do tempo, o que vier depois tenta a API da Twilio.
+    const pending: string[] = [];
+    let responded = false;
+    const finish = () => {
+      if (responded) return;
+      responded = true;
+      clearTimeout(timer);
+      res.type('text/xml').send(twiml(pending.splice(0)));
+    };
+    const collector: WhatsAppClient = {
+      sendText: async (to, body) => {
+        if (!responded) pending.push(body);
+        else await opts.client.sendText(to, body);
+      },
+      getMediaInfo: (id) => opts.client.getMediaInfo(id),
+      downloadMedia: (info) => opts.client.downloadMedia(info),
+    };
+    const timer = setTimeout(() => {
+      logger.warn('Resposta passou do tempo do webhook; o restante vai pela API');
+      finish();
+    }, opts.replyBudgetMs ?? 13_000);
+
+    opts
+      .handle(msg, collector)
+      .catch((err) => logger.error('Erro ao processar mensagem', errorInfo(err)))
+      .finally(finish);
   });
 
   return router;
