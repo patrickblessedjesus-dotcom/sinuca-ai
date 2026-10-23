@@ -17,29 +17,35 @@ try {
   throw err;
 }
 
-if (config.skipSignatureVerification) {
+if (config.whatsappEnabled && config.skipSignatureVerification) {
   logger.warn('SKIP_SIGNATURE_VERIFICATION=true: assinatura do webhook NÃO será verificada. Use só em desenvolvimento.');
 }
 
-const whatsapp = createWhatsAppClient({
-  token: config.whatsappToken,
-  phoneNumberId: config.phoneNumberId,
-  graphApiVersion: config.graphApiVersion,
-});
 const coach = createCoach({ apiKey: config.openaiApiKey, model: config.openaiModel, knowledge: config.knowledge });
 
+const whatsapp = config.whatsappEnabled
+  ? createWhatsAppClient({ token: config.whatsappToken, phoneNumberId: config.phoneNumberId, graphApiVersion: config.graphApiVersion })
+  : undefined;
+
 const app = createApp({
-  verifyToken: config.verifyToken,
-  appSecret: config.appSecret,
-  skipSignatureVerification: config.skipSignatureVerification,
-  allowedNumbers: config.allowedNumbers,
-  onMessage: (msg) => handleMessage(msg, { whatsapp, coach }),
+  webhook: whatsapp
+    ? {
+        verifyToken: config.verifyToken,
+        appSecret: config.appSecret,
+        skipSignatureVerification: config.skipSignatureVerification,
+        allowedNumbers: config.allowedNumbers,
+        onMessage: (msg) => handleMessage(msg, { whatsapp, coach }),
+      }
+    : undefined,
+  demo: config.demoCode ? { code: config.demoCode, coach } : undefined,
 });
 
 const server = app.listen(config.port, () => {
   logger.info('Sinuca AI no ar', {
     port: config.port,
     model: config.openaiModel,
+    whatsapp: config.whatsappEnabled,
+    demo: Boolean(config.demoCode),
     graphApiVersion: config.graphApiVersion,
     knowledgeLoaded: config.knowledge.length > 0,
     allowedNumbers: config.allowedNumbers.length,

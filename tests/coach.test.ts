@@ -148,7 +148,7 @@ describe('config', () => {
 
   it('carrega padrões', () => {
     const c = loadConfig(base, '');
-    expect(c.graphApiVersion).toBe('v23.0');
+    expect(c.graphApiVersion).toBe('v25.0');
     expect(c.openaiModel).toBeTruthy();
   });
 
