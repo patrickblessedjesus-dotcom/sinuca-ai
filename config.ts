@@ -3,6 +3,18 @@ import { resolve } from 'node:path';
 
 export interface Config {
   port: number;
+  whatsappEnabled: boolean;
+  demoCode: string | undefined;
+  zapiEnabled: boolean;
+  zapiInstanceId: string;
+  zapiToken: string;
+  zapiClientToken: string | undefined;
+  zapiWebhookSecret: string;
+  twilioEnabled: boolean;
+  twilioAccountSid: string;
+  twilioAuthToken: string;
+  twilioFrom: string;
+  twilioPublicUrl: string | undefined;
   verifyToken: string;
   whatsappToken: string;
   phoneNumberId: string;
@@ -15,7 +27,7 @@ export interface Config {
   knowledge: string;
 }
 
-export const DEFAULT_GRAPH_API_VERSION = 'v23.0';
+export const DEFAULT_GRAPH_API_VERSION = 'v25.0';
 export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const MAX_KNOWLEDGE_CHARS = 60_000;
 
@@ -36,14 +48,56 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
     return v ?? '';
   };
 
-  const verifyToken = req('VERIFY_TOKEN');
-  const whatsappToken = req('WHATSAPP_TOKEN');
-  const phoneNumberId = req('PHONE_NUMBER_ID');
   const openaiApiKey = req('OPENAI_API_KEY');
+  const demoCode = env.DEMO_CODE?.trim() || undefined;
 
+  // WhatsApp é opcional: se qualquer variável dele estiver definida, todas passam a ser obrigatórias.
+  const waVars = ['VERIFY_TOKEN', 'WHATSAPP_TOKEN', 'PHONE_NUMBER_ID'];
+  const whatsappEnabled = waVars.some((n) => env[n]?.trim());
+  let verifyToken = '';
+  let whatsappToken = '';
+  let phoneNumberId = '';
   const appSecret = env.APP_SECRET?.trim() || undefined;
   const skipSignatureVerification = env.SKIP_SIGNATURE_VERIFICATION?.trim().toLowerCase() === 'true';
-  if (!appSecret && !skipSignatureVerification) missing.push('APP_SECRET (ou SKIP_SIGNATURE_VERIFICATION=true só em desenvolvimento)');
+  if (whatsappEnabled) {
+    verifyToken = req('VERIFY_TOKEN');
+    whatsappToken = req('WHATSAPP_TOKEN');
+    phoneNumberId = req('PHONE_NUMBER_ID');
+    if (!appSecret && !skipSignatureVerification) missing.push('APP_SECRET (ou SKIP_SIGNATURE_VERIFICATION=true só em desenvolvimento)');
+  }
+
+  // Z-API (não oficial) é opcional: ativa quando ZAPI_INSTANCE_ID estiver definido.
+  const zapiEnabled = Boolean(env.ZAPI_INSTANCE_ID?.trim());
+  let zapiInstanceId = '';
+  let zapiToken = '';
+  let zapiWebhookSecret = '';
+  const zapiClientToken = env.ZAPI_CLIENT_TOKEN?.trim() || undefined;
+  if (zapiEnabled) {
+    zapiInstanceId = req('ZAPI_INSTANCE_ID');
+    zapiToken = req('ZAPI_TOKEN');
+    zapiWebhookSecret = req('ZAPI_WEBHOOK_SECRET');
+    if (zapiWebhookSecret && !/^[A-Za-z0-9_-]{12,100}$/.test(zapiWebhookSecret)) {
+      missing.push('ZAPI_WEBHOOK_SECRET com 12+ caracteres (só letras, números, - e _)');
+    }
+  }
+
+  // Twilio é opcional: ativa quando TWILIO_ACCOUNT_SID estiver definido.
+  const twilioEnabled = Boolean(env.TWILIO_ACCOUNT_SID?.trim());
+  let twilioAccountSid = '';
+  let twilioAuthToken = '';
+  const twilioFrom = env.TWILIO_WHATSAPP_FROM?.trim() || 'whatsapp:+14155238886';
+  const twilioPublicUrl = env.TWILIO_WEBHOOK_URL?.trim() || undefined;
+  if (twilioEnabled) {
+    twilioAccountSid = req('TWILIO_ACCOUNT_SID');
+    twilioAuthToken = req('TWILIO_AUTH_TOKEN');
+    if (!/^whatsapp:\+\d{6,20}$/.test(twilioFrom)) missing.push('TWILIO_WHATSAPP_FROM no formato whatsapp:+14155238886');
+  }
+
+  if (!whatsappEnabled && !zapiEnabled && !twilioEnabled && !demoCode) {
+    missing.push('VERIFY_TOKEN, WHATSAPP_TOKEN, PHONE_NUMBER_ID (WhatsApp), TWILIO_ACCOUNT_SID (Twilio), ZAPI_INSTANCE_ID (Z-API) ou DEMO_CODE (página de demonstração)');
+  }
+
+  if (demoCode && demoCode.length < 6) missing.push('DEMO_CODE com pelo menos 6 caracteres');
 
   if (missing.length) {
     throw new ConfigError(`Variáveis de ambiente obrigatórias ausentes: ${missing.join(', ')}. Veja o .env.example.`);
@@ -54,7 +108,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
 
   const graphApiVersion = env.GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION;
   if (!/^v\d+\.\d+$/.test(graphApiVersion)) throw new ConfigError('GRAPH_API_VERSION deve ter o formato v23.0.');
-  if (!/^\d+$/.test(phoneNumberId)) throw new ConfigError('PHONE_NUMBER_ID deve conter só dígitos.');
+  if (whatsappEnabled && !/^\d+$/.test(phoneNumberId)) throw new ConfigError('PHONE_NUMBER_ID deve conter só dígitos.');
 
   const allowedNumbers = (env.ALLOWED_NUMBERS ?? '')
     .split(',')
@@ -63,6 +117,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
 
   return {
     port,
+    whatsappEnabled,
+    demoCode,
+    zapiEnabled,
+    zapiInstanceId,
+    zapiToken,
+    zapiClientToken,
+    zapiWebhookSecret,
+    twilioEnabled,
+    twilioAccountSid,
+    twilioAuthToken,
+    twilioFrom,
+    twilioPublicUrl,
     verifyToken,
     whatsappToken,
     phoneNumberId,
