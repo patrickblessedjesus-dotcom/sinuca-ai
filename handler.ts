@@ -17,6 +17,8 @@ export interface IncomingMessage {
   type: string;
   imageId?: string;
   imageMime?: string;
+  /** Texto da mensagem, quando for do tipo text. */
+  text?: string;
 }
 
 export interface HandlerDeps {
@@ -40,6 +42,16 @@ export async function handleMessage(msg: IncomingMessage, deps: HandlerDeps): Pr
   const to = msg.from;
 
   if (msg.type === 'text') {
+    const question = msg.text?.trim();
+    if (question && coach.ask) {
+      try {
+        await safeSend(whatsapp, to, await coach.ask(question));
+      } catch (err) {
+        logger.error('Falha ao responder texto', { to: maskPhone(to), ...errorInfo(err) });
+        await safeSend(whatsapp, to, MSG_TEXT);
+      }
+      return;
+    }
     await safeSend(whatsapp, to, MSG_TEXT);
     return;
   }

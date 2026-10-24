@@ -28,6 +28,36 @@ export function createDemoRouter(opts: DemoOptions): Router {
     res.type('html').send(DEMO_HTML);
   });
 
+  router.post('/demo/ask', express.json({ limit: '16kb' }), async (req, res) => {
+    const code = req.get('x-demo-code') ?? '';
+    if (!sameCode(code, opts.code)) {
+      res.status(401).json({ error: 'Código de acesso inválido.' });
+      return;
+    }
+    if (Date.now() - windowStart > 3_600_000) {
+      windowStart = Date.now();
+      count = 0;
+    }
+    if (++count > maxPerHour) {
+      res.status(429).json({ error: 'Limite de perguntas por hora atingido. Tente mais tarde.' });
+      return;
+    }
+    const q = (req.body as { question?: unknown } | undefined)?.question;
+    if (typeof q !== 'string' || !q.trim() || q.length > 1000 || !opts.coach.ask) {
+      res.status(400).json({ error: 'Escreva uma pergunta (até 1000 caracteres).' });
+      return;
+    }
+    const started = Date.now();
+    try {
+      const text = await opts.coach.ask(q);
+      logger.info('Pergunta da demo respondida', { ms: Date.now() - started });
+      res.json({ text });
+    } catch (err) {
+      logger.error('Falha na pergunta da demo', { ms: Date.now() - started, ...errorInfo(err) });
+      res.status(502).json({ error: 'Não consegui responder agora. Tenta de novo.' });
+    }
+  });
+
   router.post('/demo/analyze', express.json({ limit: '8mb' }), async (req, res) => {
     const code = req.get('x-demo-code') ?? '';
     if (!sameCode(code, opts.code)) {
@@ -83,6 +113,7 @@ const DEMO_HTML = `<!doctype html>
   p.sub { color: var(--muted); margin: 0 0 20px; }
   .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
   label { display:block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+  textarea { width:100%; padding: 12px; border-radius: 10px; border: 1px solid #2f6b55; background:#0b3d2e; color: var(--fg); font-size:16px; font-family: inherit; resize: vertical; }
   input[type=password] { width:100%; padding: 12px; border-radius: 10px; border: 1px solid #2f6b55; background:#0b3d2e; color: var(--fg); font-size:16px; }
   .btn { display:block; width:100%; text-align:center; padding: 16px; border-radius: 12px; border: 0; font-size: 18px; font-weight: 700; background: var(--accent); color: #1d1d1d; cursor: pointer; }
   .btn[disabled] { opacity: .6; }
@@ -95,7 +126,7 @@ const DEMO_HTML = `<!doctype html>
 <body>
 <main>
   <h1>🎱 Sinuca AI</h1>
-  <p class="sub">Tira uma foto da mesa (de cima, mesa inteira) e receba uma sugestão de jogada.</p>
+  <p class="sub">Tira uma foto da mesa (de cima, mesa inteira) e receba uma sugestão de jogada, ou pergunte uma regra.</p>
 
   <div class="card" id="codeBox">
     <label for="code">Código de acesso</label>
@@ -108,6 +139,12 @@ const DEMO_HTML = `<!doctype html>
     <img id="preview" alt="Foto da mesa">
   </div>
 
+  <div class="card">
+    <label for="q">Ou pergunte algo de sinuca</label>
+    <textarea id="q" rows="3" maxlength="1000" placeholder="Ex.: Como funciona o par ou ímpar na regra suja?"></textarea>
+    <button class="btn" id="askBtn" style="margin-top:10px">💬 Perguntar</button>
+  </div>
+
   <div class="card hidden" id="out"><div id="result"></div></div>
 </main>
 <script>
@@ -116,6 +153,25 @@ const DEMO_HTML = `<!doctype html>
   const saved = store.get('sinuca_code'); if (saved) { $('code').value = saved; }
 
   $('pick').onclick = () => $('file').click();
+
+  $('askBtn').onclick = async () => {
+    const q = $('q').value.trim(); if (!q) return;
+    const code = $('code').value.trim();
+    if (!code) { show('Digite o código de acesso primeiro.', true); return; }
+    store.set('sinuca_code', code);
+    $('askBtn').disabled = true; $('askBtn').textContent = 'Pensando… 🎱';
+    show('Pensando na resposta…', false);
+    try {
+      const r = await fetch('/demo/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-demo-code': code }, body: JSON.stringify({ question: q }) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Erro ao responder.');
+      show(data.text, false);
+    } catch (e) {
+      show(e.message || 'Erro ao responder.', true);
+    } finally {
+      $('askBtn').disabled = false; $('askBtn').textContent = '💬 Perguntar';
+    }
+  };
 
   function resize(file) {
     return new Promise((resolve, reject) => {

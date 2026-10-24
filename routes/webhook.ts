@@ -67,6 +67,7 @@ export function extractMessages(body: unknown): IncomingMessage[] {
         const type = str(m.type);
         if (!id || !from || !type || !/^\d{6,20}$/.test(from)) continue;
         const msg: IncomingMessage = { id, from, type };
+        if (type === 'text' && isObj(m.text) && typeof m.text.body === 'string') msg.text = m.text.body.slice(0, 2000);
         if (type === 'image' && isObj(m.image)) {
           msg.imageId = str(m.image.id);
           msg.imageMime = str(m.image.mime_type);

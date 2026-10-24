@@ -28,7 +28,7 @@ export function parseZapiMessage(body: unknown): IncomingMessage | null {
   if (isObj(body.image) && str(body.image.imageUrl)) {
     return { id, from, type: 'image', imageId: str(body.image.imageUrl), imageMime: str(body.image.mimeType, 100) };
   }
-  if (isObj(body.text) && typeof body.text.message === 'string') return { id, from, type: 'text' };
+  if (isObj(body.text) && typeof body.text.message === 'string') return { id, from, type: 'text', text: body.text.message.slice(0, 2000) };
   return { id, from, type: 'other' };
 }
 
