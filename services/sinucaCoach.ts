@@ -25,6 +25,8 @@ export const SITUATION_PROMPT = `Você é um treinador assistente de sinuca. O j
 
 ${POCKETS}
 
+Antes de tudo, responda à situação que o jogador DESCREVEU (no áudio ou no texto). Se ele disse que está travado, a resposta é sobre como sair do travado; se disse que vai matar a última bola, é sobre a disputa do ás; e assim por diante. Use o "Conhecimento do treinador" para identificar a situação. Não puxe assunto que ele não perguntou.
+
 Regras de honestidade:
 - Identifique só o que está visível na foto. Não invente bolas, posições nem regras.
 - Você NÃO mede ângulos nem calcula trajetórias de verdade. As porcentagens são uma ESTIMATIVA visual de jogador experiente, baseada na distância, no ângulo aparente do corte e nos obstáculos. Escreva "chance estimada" e nunca garanta uma tacada.
@@ -36,11 +38,11 @@ Formato exato:
 🎱 Leitura da mesa:
 <o que dá pra ver: branca, bolas relevantes, caçapas próximas>
 
-1️⃣ <nome curto da jogada> — caçapa <n>
+1️⃣ <nome curto da jogada> — caçapa <n> (ou "saída de X tabelas na bola <n>", ou "defesa")
 Chance estimada: <x>%
 Risco: <o que pode dar errado e qual falta da regra suja pode acontecer, com quantas bolas saem>
 
-2️⃣ <outra jogada diferente> — caçapa <n> (ou "defesa")
+2️⃣ <outra jogada diferente> — caçapa <n> (ou saída de tabela, ou defesa)
 Chance estimada: <x>%
 Risco: <...>
 
@@ -139,7 +141,7 @@ Além do texto, devolva um esquema aproximado da mesa para ser desenhado. Respon
 - Coordenadas normalizadas da mesa em pé: x de 0 (lado esquerdo) a 1 (lado direito); y de 0 (borda de baixo) a 1 (borda de cima). Caçapas: 1=(0,0), 2=(1,0), 3=(0,0.5), 4=(1,0.5), 5=(0,1), 6=(1,1).
 - "cue": posição estimada da bola branca (ou null se não der para ver).
 - "balls": só as bolas relevantes que dá para ver, com "label" curto (número da bola, ou "Ás") e "group" (par, impar, as ou outra).
-- "plays": as mesmas 3 jogadas do texto, na mesma ordem. "level": verde = tranquila, amarelo = atenção, vermelho = arriscada (combine com a chance: verde a mais alta). "chance": a chance estimada em % (inteiro 0 a 100). "pocket": número da caçapa (1 a 6) ou null para defesa. "path": pontos do traçado, começando na branca, passando pela bola alvo (e tabela, se houver) e terminando na caçapa ou onde a branca deve parar.
+- "plays": as mesmas 3 jogadas do texto, na mesma ordem. "level": verde = tranquila, amarelo = atenção, vermelho = arriscada (combine com a chance: verde a mais alta). "chance": a chance estimada em % (inteiro 0 a 100). "pocket": número da caçapa (1 a 6) ou null para defesa. "path": pontos do traçado, começando na branca, passando pela bola alvo e terminando na caçapa ou onde a branca deve parar. Em saída de tabela (travado), inclua um ponto em CADA tabela que a branca bate (x=0 ou x=1 nas laterais, y=0 ou y=1 em baixo/em cima) antes de chegar na bola alvo.
 - São estimativas visuais: não finja precisão.
 - Se a foto não permitir avaliar, devolva "plays" e "balls" vazios, "cue" null, e explique no "text".`;
 
@@ -192,6 +194,8 @@ export interface CoachOptions {
   knowledge?: string;
   /** Para testes: injeta um cliente OpenAI falso. */
   client?: Pick<OpenAI, 'chat' | 'audio'>;
+  /** Modelo reserva, usado se o principal falhar (ex.: modelo indisponível na conta). */
+  fallbackModel?: string;
   /** Modelo de transcrição de áudio. */
   transcribeModel?: string;
 }
@@ -204,13 +208,26 @@ export function createCoach(opts: CoachOptions): Coach {
   const textPrompt = buildTextPrompt(opts.knowledge ?? '');
   const situationPrompt = buildSituationPrompt(opts.knowledge ?? '');
   const transcribeModel = opts.transcribeModel ?? process.env.OPENAI_TRANSCRIBE_MODEL?.trim() ?? 'gpt-4o-mini-transcribe';
+  const fallbackModel = opts.fallbackModel ?? process.env.OPENAI_FALLBACK_MODEL?.trim() ?? 'gpt-4o-mini';
+  type CreateParams = Parameters<typeof client.chat.completions.create>[0];
+  // Tenta o modelo principal; se a API recusar (400/403/404), tenta o reserva uma vez.
+  const complete = async (params: Omit<CreateParams, 'model'>) => {
+    try {
+      return (await client.chat.completions.create({ ...params, model: opts.model } as CreateParams)) as OpenAI.Chat.Completions.ChatCompletion;
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (fallbackModel && fallbackModel !== opts.model && (status === 400 || status === 403 || status === 404)) {
+        return (await client.chat.completions.create({ ...params, model: fallbackModel } as CreateParams)) as OpenAI.Chat.Completions.ChatCompletion;
+      }
+      throw err;
+    }
+  };
   const clip = (t: string) => (t.length > MAX_REPLY_CHARS ? `${t.slice(0, MAX_REPLY_CHARS - 1)}…` : t);
 
   return {
     async analyze(image, mime, situation) {
       const ctx = situation?.trim().slice(0, 2000);
-      const completion = await client.chat.completions.create({
-        model: opts.model,
+      const completion = await complete({
         max_completion_tokens: 3000,
         messages: [
           { role: 'system', content: ctx ? situationPrompt : systemPrompt },
@@ -230,8 +247,7 @@ export function createCoach(opts: CoachOptions): Coach {
 
     async plan(image, mime, situation) {
       const ctx = situation?.trim().slice(0, 2000);
-      const completion = await client.chat.completions.create({
-        model: opts.model,
+      const completion = await complete({
         max_completion_tokens: 4000,
         response_format: { type: 'json_schema', json_schema: { name: 'plano_de_jogada', strict: true, schema: PLAN_SCHEMA as unknown as Record<string, unknown> } },
         messages: [
@@ -268,8 +284,7 @@ export function createCoach(opts: CoachOptions): Coach {
 
     async ask(question) {
       const q = question.trim().slice(0, 1000);
-      const completion = await client.chat.completions.create({
-        model: opts.model,
+      const completion = await complete({
         max_completion_tokens: 1500,
         messages: [
           { role: 'system', content: textPrompt },
