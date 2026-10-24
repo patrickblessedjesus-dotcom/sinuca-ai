@@ -145,7 +145,7 @@ const DEMO_HTML = `<!doctype html>
   .heard { color: #cfe9e3; font-style: italic; }
   .err { color: #ffb4a8; }
   .typing { color: var(--muted); font-style: italic; }
-  .diagram svg { width: 100%; max-width: 210px; display:block; margin: 0 auto 6px; }
+  .diagram svg { width: 100%; max-width: 100%; border-radius: 8px; display:block; margin: 0 auto 6px; }
   .legend { font-size: 14px; margin: 4px 0 8px; display:flex; flex-direction:column; gap:2px; }
   .note { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   footer { background: var(--bar); padding: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
@@ -200,7 +200,7 @@ Caçapas: embaixo 1 e 2, no meio 3 e 4, em cima 5 e 6.</div>
   }
 
   // ---------- Foto ----------
-  let photo = null;
+  let photo = null, photoSize = { w: 1000, h: 1000 };
   function resize(file) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -210,6 +210,7 @@ Caçapas: embaixo 1 e 2, no meio 3 e 4, em cima 5 e 6.</div>
         const c = document.createElement('canvas'); c.width = w; c.height = h;
         c.getContext('2d').drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(img.src);
+        photoSize = { w, h };
         resolve(c.toDataURL('image/jpeg', 0.85));
       };
       img.onerror = () => reject(new Error('Não consegui abrir essa imagem.'));
@@ -278,7 +279,7 @@ Caçapas: embaixo 1 e 2, no meio 3 e 4, em cima 5 e 6.</div>
     if (text) html += esc(text);
     bubble('out', html);
 
-    const sentPhoto = photo;
+    const sentPhoto = photo, sentSize = photoSize;
     $('text').value = ''; $('text').style.height = 'auto'; photo = null; $('attach').style.display = 'none'; updateSend();
     busy = true;
     const wait = bubble('in typing', sentPhoto ? (audio ? 'Ouvindo o áudio e lendo a mesa… 🎱' : 'Lendo a mesa… 🎱') : 'Digitando…');
@@ -292,7 +293,7 @@ Caçapas: embaixo 1 e 2, no meio 3 e 4, em cima 5 e 6.</div>
       store.set('sinuca_code', code); $('code').classList.add('hidden');
       let out = '';
       if (data.heard) out += '<div class="heard">🗣️ "' + esc(data.heard) + '"</div><br>';
-      out += diagramHtml(data.diagram);
+      out += diagramHtml(data.diagram, sentPhoto, sentSize);
       out += esc(data.text);
       wait.className = 'msg in'; wait.innerHTML = out;
       wait.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -304,51 +305,53 @@ Caçapas: embaixo 1 e 2, no meio 3 e 4, em cima 5 e 6.</div>
     }
   }
 
-  // ---------- Desenho da mesa ----------
+  // ---------- Traçados em cima da foto ----------
   const COLORS = { verde: '#2ecc71', amarelo: '#f1c40f', vermelho: '#e74c3c' };
-  const BALL = { par: '#3498db', impar: '#e67e22', as: '#f4f1e8', outra: '#95a5a6' };
-  function diagramHtml(d) {
-    if (!d || !d.plays || !d.plays.length) return '';
-    const W = 200, H = 400, P = 16;
-    const X = (x) => P + x * (W - 2 * P), Y = (y) => H - P - y * (H - 2 * P);
-    const pockets = [[0,0,1],[1,0,2],[0,0.5,3],[1,0.5,4],[0,1,5],[1,1,6]];
-    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Esquema da mesa">';
-    svg += '<rect x="2" y="2" width="' + (W-4) + '" height="' + (H-4) + '" rx="12" fill="#5b3a1e"/>';
-    svg += '<rect x="' + P + '" y="' + P + '" width="' + (W-2*P) + '" height="' + (H-2*P) + '" fill="#127a4a"/>';
-    pockets.forEach(([x, y, n]) => {
-      svg += '<circle cx="' + X(x) + '" cy="' + Y(y) + '" r="9" fill="#111"/>';
-      const lx = x === 0 ? X(x) + 16 : X(x) - 16, ly = y === 0 ? Y(y) - 12 : y === 1 ? Y(y) + 20 : Y(y) + 5;
-      svg += '<text x="' + lx + '" y="' + ly + '" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">' + n + '</text>';
-    });
-    const labels = [];
-    d.plays.slice().reverse().forEach((pl, iRev) => {
-      const i = d.plays.length - 1 - iRev;
-      const pts = pl.path.map((p) => X(p.x) + ',' + Y(p.y)).join(' ');
-      const c = COLORS[pl.level] || '#fff';
-      svg += '<polyline points="' + pts + '" fill="none" stroke="' + c + '" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="' + (i === 0 ? '0' : '6 4') + '"/>';
-      const last = pl.path[pl.path.length - 1];
-      svg += '<circle cx="' + X(last.x) + '" cy="' + Y(last.y) + '" r="4" fill="' + c + '"/>';
-      labels.push({ i, c, pl });
+  function diagramHtml(d, img, size) {
+    if (!d || !d.plays || !d.plays.length || !img) return '';
+    const W = size.w, H = size.h, U = Math.max(W, H) / 100; // unidade relativa ao tamanho da foto
+    const X = (x) => (x * W).toFixed(1), Y = (y) => (y * H).toFixed(1);
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Foto da mesa com as jogadas">';
+    svg += '<image href="' + img + '" x="0" y="0" width="' + W + '" height="' + H + '"/>';
+    // caçapas numeradas
+    (d.pockets || []).forEach((p) => {
+      svg += '<circle cx="' + X(p.x) + '" cy="' + Y(p.y) + '" r="' + (2.6 * U) + '" fill="#000" fill-opacity="0.75" stroke="#fff" stroke-width="' + (0.3 * U) + '"/>';
+      svg += '<text x="' + X(p.x) + '" y="' + (p.y * H + 0.95 * U).toFixed(1) + '" fill="#fff" font-size="' + (2.8 * U) + '" font-weight="700" text-anchor="middle">' + p.n + '</text>';
     });
     const placed = [];
-    labels.sort((a, b) => a.i - b.i).forEach(({ i, c, pl }) => {
+    d.plays.slice().reverse().forEach((pl, iRev) => {
+      const i = d.plays.length - 1 - iRev;
+      const c = COLORS[pl.level] || '#fff';
+      const pts = pl.path.map((p) => X(p.x) + ',' + Y(p.y)).join(' ');
+      // contorno escuro pra aparecer em qualquer pano
+      svg += '<polyline points="' + pts + '" fill="none" stroke="#000" stroke-opacity="0.55" stroke-width="' + (1.6 * U) + '" stroke-linejoin="round" stroke-linecap="round"/>';
+      svg += '<polyline points="' + pts + '" fill="none" stroke="' + c + '" stroke-width="' + (0.9 * U) + '" stroke-linejoin="round" stroke-linecap="round"' + (i === 0 ? '' : ' stroke-dasharray="' + (2.2 * U) + ' ' + (1.4 * U) + '"') + '/>';
+      const last = pl.path[pl.path.length - 1];
+      svg += '<circle cx="' + X(last.x) + '" cy="' + Y(last.y) + '" r="' + (1.3 * U) + '" fill="' + c + '" stroke="#000" stroke-width="' + (0.3 * U) + '"/>';
+      // caminho da branca depois da tacada (pontilhado branco até onde ela para)
+      if (pl.cueEnd && pl.path.length >= 2) {
+        const hit = pl.path[pl.path.length - 2];
+        svg += '<line x1="' + X(hit.x) + '" y1="' + Y(hit.y) + '" x2="' + X(pl.cueEnd.x) + '" y2="' + Y(pl.cueEnd.y) + '" stroke="#fff" stroke-width="' + (0.5 * U) + '" stroke-dasharray="' + (0.8 * U) + ' ' + (0.8 * U) + '" opacity="0.9"/>';
+        svg += '<circle cx="' + X(pl.cueEnd.x) + '" cy="' + Y(pl.cueEnd.y) + '" r="' + (1.6 * U) + '" fill="none" stroke="#fff" stroke-width="' + (0.5 * U) + '"/>';
+        svg += '<text x="' + X(pl.cueEnd.x) + '" y="' + (pl.cueEnd.y * H + 0.9 * U).toFixed(1) + '" fill="#fff" font-size="' + (2.2 * U) + '" font-weight="700" text-anchor="middle">' + (i + 1) + '</text>';
+      }
+    });
+    // selos de % no último trecho de cada traçado, sem sobrepor
+    d.plays.forEach((pl, i) => {
+      const c = COLORS[pl.level] || '#fff';
       const a = pl.path[pl.path.length - 2], b = pl.path[pl.path.length - 1];
-      let lx = Math.min(W - 26, Math.max(26, X(a.x + (b.x - a.x) * 0.55)));
-      let ly = Math.min(H - 12, Math.max(24, Y(a.y + (b.y - a.y) * 0.55)));
-      for (let k = 0; k < 6 && placed.some((p) => Math.abs(p.x - lx) < 44 && Math.abs(p.y - ly) < 18); k++) ly += 20;
+      const bw = 10.5 * U, bh = 3.8 * U;
+      let lx = Math.min(W - bw / 2, Math.max(bw / 2, (a.x + (b.x - a.x) * 0.5) * W));
+      let ly = Math.min(H - bh, Math.max(bh, (a.y + (b.y - a.y) * 0.5) * H));
+      for (let k = 0; k < 6 && placed.some((p) => Math.abs(p.x - lx) < bw && Math.abs(p.y - ly) < bh); k++) ly += bh * 1.15;
       placed.push({ x: lx, y: ly });
-      svg += '<rect x="' + (lx - 22) + '" y="' + (ly - 12) + '" width="44" height="17" rx="8" fill="' + c + '" stroke="#111" stroke-width="0.5"/>';
-      svg += '<text x="' + lx + '" y="' + (ly + 1) + '" fill="#111" font-size="11" font-weight="700" text-anchor="middle">' + (i + 1) + ' · ' + pl.chance + '%</text>';
+      svg += '<rect x="' + (lx - bw / 2).toFixed(1) + '" y="' + (ly - bh * 0.72).toFixed(1) + '" width="' + bw + '" height="' + bh + '" rx="' + (bh / 2) + '" fill="' + c + '" stroke="#000" stroke-width="' + (0.25 * U) + '"/>';
+      svg += '<text x="' + lx.toFixed(1) + '" y="' + (ly + bh * 0.08).toFixed(1) + '" fill="#111" font-size="' + (2.4 * U) + '" font-weight="800" text-anchor="middle">' + (i + 1) + ' · ' + pl.chance + '%</text>';
     });
-    (d.balls || []).forEach((b) => {
-      svg += '<circle cx="' + X(b.x) + '" cy="' + Y(b.y) + '" r="7" fill="' + (BALL[b.group] || BALL.outra) + '" stroke="#111" stroke-width="1"/>';
-      svg += '<text x="' + X(b.x) + '" y="' + (Y(b.y) + 3.5) + '" fill="#111" font-size="8" font-weight="700" text-anchor="middle">' + esc(b.label) + '</text>';
-    });
-    if (d.cue) svg += '<circle cx="' + X(d.cue.x) + '" cy="' + Y(d.cue.y) + '" r="7" fill="#fff" stroke="#111" stroke-width="1.5"/>';
     svg += '</svg>';
     const dot = { verde: '🟢', amarelo: '🟡', vermelho: '🔴' };
-    const legend = '<div class="legend">' + d.plays.map((pl, i) => '<span>' + (dot[pl.level] || '') + ' ' + (i + 1) + ') ' + esc(pl.name) + ' — ' + pl.chance + '%</span>').join('') + '</div>';
-    return '<div class="diagram">' + svg + '</div>' + legend + '<div class="note">Esquema aproximado, feito a partir da foto. As % são estimativas.</div>';
+    const legend = '<div class="legend">' + d.plays.map((pl, i) => '<span>' + (dot[pl.level] || '') + ' ' + (i + 1) + ') ' + esc(pl.name) + ' — ' + pl.chance + '%' + (pl.spin ? ' · ' + esc(pl.spin) : '') + '</span>').join('') + '</div>';
+    return '<div class="diagram">' + svg + '</div>' + legend + '<div class="note">Traçado da IA em cima da sua foto. ⚪ pontilhado branco = onde a branca para. As % são estimativas.</div>';
   }
 </script>
 </body>

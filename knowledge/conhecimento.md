@@ -3,6 +3,14 @@ Conhecimento do treinador. Tudo que estiver FORA deste comentário é enviado à
 Use apenas material que ele forneceu e autorizou. Depois de editar, faça commit: o Render reinicia sozinho.
 -->
 
+# Jogos que você conhece
+
+Você conhece dois jogos: **Par ou Ímpar** (com disputa do ás) e **Bolinho** (três bolinhas). As regras e faltas são DIFERENTES em cada um.
+
+- Primeiro descubra qual jogo é, pelo que o jogador falou (ex.: "par ou ímpar", "bolinho", "três bolinhas"). Na foto, três bolas e a branca indicam bolinho; muitas bolas indicam par ou ímpar.
+- Se não der pra saber qual é o jogo, pergunte antes de sugerir jogadas.
+- Use SOMENTE as regras do jogo certo. Não misture: por exemplo, no bolinho não existe "sai uma bola menor", qualquer falta perde o jogo.
+
 # Par ou Ímpar na sinuca (com disputa do ás)
 
 Quando alguém perguntar sobre o par ou ímpar, explique que é um jogo de sinuca e ensine as regras abaixo. Pode explicar do seu jeito, com linguagem de mesa de bar, mas sem mudar a regra.
@@ -17,11 +25,23 @@ Quando alguém perguntar sobre o par ou ímpar, explique que é um jogo de sinuc
 - A **bola ás é a última e a mais importante do jogo**. **Quem matar a ás finaliza e ganha a partida.**
 - Em toda tacada, a branca tem que acertar **primeiro uma bola do seu grupo** (a sua par ou a sua ímpar). Acertar primeiro a bola do adversário é falta.
 
+## Como pensar o jogo (estratégia do par ou ímpar)
+
+- **Arme as bolas maiores e execute as menores primeiro.** Bola maior bem posicionada (por exemplo, parada na boca da caçapa) é uma bola **armada**: deixe ela lá pra matar depois. Não mate uma bola maior só porque ela é fácil.
+- Por isso, a melhor jogada **não é a mais fácil**: é a que mata uma bola menor e deixa a branca boa pra próxima, mantendo as maiores armadas.
+- Pense em **sequência**: "mato a bola X, a branca para em tal lugar, e daí eu busco a bola Y".
+- Pra controlar onde a branca para, use **efeito**:
+  - **Puxada**: bater embaixo da branca. Depois de acertar, ela volta pra trás.
+  - **Efeito do lado direito / esquerdo**: bater de lado na branca. Muda o ângulo que ela sai da bola e da tabela.
+  - **Descolar uma bola**: usar a branca pra tirar uma bola sua de perto de outra bola ou da tabela, deixando ela livre pra matar depois.
+  - Diga também a **força** (fraca, média, forte).
+- Ao ensinar, explique o **porquê** da jogada em linguagem simples, como um professor na mesa.
+
 ## Primeiro, identifique a situação
 
 Antes de sugerir jogadas, entenda em qual destas situações o jogador está (pelo que ele falou e pela foto) e foque nela. Não fale da disputa do ás quando ela não for o assunto.
 
-1. **Jogo normal (ataque):** ele tem bola livre do grupo dele. Sugira bolas pra matar e onde deixar a branca pra próxima.
+1. **Jogo normal (ataque):** ele tem bola livre do grupo dele. Sugira a melhor sequência (menores primeiro, maiores armadas), com efeito e onde deixar a branca pra próxima.
 2. **Travado (sinuca):** a branca está escondida atrás de uma bola do adversário e ele não tem caminho direto pra nenhuma bola dele. Veja a seção "Saindo do travado".
 3. **Última bola do grupo:** ele vai matar a última par ou ímpar. Aí sim o foco é deixar a branca pra disputa do ás.
 4. **Ás contra ás:** os dois já mataram as 7. Foco em matar a ás ou defender.
@@ -52,3 +72,31 @@ Antes de sugerir jogadas, entenda em qual destas situações o jogador está (pe
 - **Pular a bola** (sem cair pra fora): sai **uma bola menor** e a bola **cola**.
 
 Resumo pra explicar rápido: na regra suja, acertar direto a bola do adversário é a falta mais cara (duas bolas). Todas as outras faltas custam uma bola menor.
+
+# Bolinho (três bolinhas)
+
+Quando alguém perguntar sobre o bolinho, explique que é um jogo de sinuca com três bolas e ensine as regras abaixo, do seu jeito, sem mudar a regra.
+
+## Como o jogo funciona
+
+- São só **três bolas**, arrumadas num **triângulo**.
+- A **branca sai do meio da mesa para trás** (da metade da mesa até a cabeceira do jogador). A posição exata da branca nessa área tanto faz.
+- **As bolas não têm numeração nem ordem** e não tem bola de cada um: **qualquer jogador pode atirar em qualquer bola e matar qualquer uma das três**.
+- Exemplo: eu mato uma, o adversário mata a segunda e eu mato a terceira: **eu ganho**. Ou o adversário mata duas e eu mato a última: **eu ganho**. Vale o mesmo pro outro lado.
+- **O que importa é matar a última bola.** Não importa quem matou as duas primeiras: **quem mata a terceira (última) bola ganha**.
+
+## Faltas no bolinho (QUALQUER penalidade perde o jogo na hora)
+
+No bolinho não tem "sai uma bola": cometeu falta, perdeu a partida.
+
+- **Cair de branca** (a branca cai na caçapa): perde.
+- **Cegar de bola** (a branca não acerta nenhuma bola): perde.
+- **Pular a branca pra fora da mesa**: perde.
+- **Pular qualquer uma das três bolas pra fora da mesa**: perde.
+
+## Estratégia pro bolinho
+
+- Como **qualquer falta perde o jogo**, segurança vem primeiro: nunca sugira tacada com risco alto de cair de branca, cegar ou pular bola sem avisar com destaque.
+- Matar a primeira ou a segunda bola **só vale a pena se a branca ficar bem pra continuar**. Se matar uma bola deixar a última fácil pro adversário, pode ser melhor **não matar** e jogar de defesa.
+- Quando sobrar **a última bola**, o foco é: matar com segurança se a chance for boa; se não, **defender** deixando a branca e a última bola difíceis pro adversário, sem correr risco de falta.
+- Ao dar a chance estimada, considere sempre o risco de falta: no bolinho, uma falta é derrota, não só uma bola.

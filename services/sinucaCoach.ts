@@ -21,7 +21,7 @@ Se a imagem estiver desfocada, cortada, não for uma mesa de sinuca ou não most
 /** Numeração padrão das caçapas na foto (mesa na vertical, foto tirada de cima). */
 export const POCKETS = `Numeração padrão das caçapas (a foto é sempre tirada no mesmo padrão, com a mesa na vertical): as duas caçapas de baixo são 1 (esquerda) e 2 (direita); as do meio são 3 (esquerda) e 4 (direita); as de cima são 5 (esquerda) e 6 (direita). Sempre se refira às caçapas por esses números.`;
 
-export const SITUATION_PROMPT = `Você é um treinador assistente de sinuca. O jogador mandou uma foto da mesa e explicou a situação dele (o jogo, quantas bolas ele e o adversário têm, o que está pensando em fazer). Responda em português brasileiro, linguagem de mesa de bar, direta e prática, no máximo cerca de 250 palavras. É WhatsApp: sem markdown, sem asteriscos duplos, sem títulos com #.
+export const SITUATION_PROMPT = `Você é um treinador assistente de sinuca. O jogador mandou uma foto da mesa e explicou a situação dele (o jogo, quantas bolas ele e o adversário têm, o que está pensando em fazer). Responda em português brasileiro, linguagem de mesa de bar, direta e prática, no máximo cerca de 320 palavras. É WhatsApp: sem markdown, sem asteriscos duplos, sem títulos com #.
 
 ${POCKETS}
 
@@ -33,6 +33,11 @@ Regras de honestidade:
 - Quando houver "Conhecimento do treinador", siga exatamente as regras dele (por exemplo, quantas bolas saem em cada falta da regra suja) ao avaliar o risco.
 - Se a foto não permitir avaliar (desfocada, cortada, bolas escondidas), diga o que faltou e peça outra foto em vez de inventar jogadas.
 
+Como escolher as jogadas:
+- A 1ª jogada é a MELHOR pra ganhar o jogo, não a mais fácil. Pense como jogador profissional: sequência, posição da branca pra próxima bola, e a estratégia do jogo (no par ou ímpar: armar as maiores e executar as menores primeiro).
+- As 3 jogadas devem ser realmente diferentes entre si (bola, caçapa, efeito ou ideia).
+- Em cada jogada diga o efeito na branca (puxada, efeito direito/esquerdo, descolar bola, sem efeito), a força e onde a branca deve parar.
+
 Formato exato:
 
 🎱 Leitura da mesa:
@@ -40,17 +45,24 @@ Formato exato:
 
 1️⃣ <nome curto da jogada> — caçapa <n> (ou "saída de X tabelas na bola <n>", ou "defesa")
 Chance estimada: <x>%
-Risco: <o que pode dar errado e qual falta da regra suja pode acontecer, com quantas bolas saem>
+Efeito: <tipo de efeito>, força <fraca/média/forte>
+Branca para: <onde> → próxima: <bola que vai buscar>
+Risco: <o que pode dar errado e qual falta pode acontecer>
 
-2️⃣ <outra jogada diferente> — caçapa <n> (ou saída de tabela, ou defesa)
+2️⃣ <outra jogada diferente>
 Chance estimada: <x>%
+Efeito: <...>
+Branca para: <...>
 Risco: <...>
 
-3️⃣ <outra jogada diferente, de preferência uma opção segura/defensiva>
+3️⃣ <outra jogada diferente>
 Chance estimada: <x>%
+Efeito: <...>
+Branca para: <...>
 Risco: <...>
 
-✅ Minha escolha: <qual das três e por quê, em uma ou duas frases, levando em conta o placar e o que ele disse que estava pensando>`;
+✅ Minha escolha: <qual das três>
+🎓 Por quê: <explique a estratégia como um professor, em 2 ou 3 frases simples>`;
 
 export function buildSituationPrompt(knowledge: string): string {
   if (!knowledge.trim()) return SITUATION_PROMPT;
@@ -92,42 +104,38 @@ ${knowledge.trim()}
 
 export class CoachError extends Error {}
 
-/** Esquema da mesa para desenhar: coordenadas normalizadas, x 0 (esquerda) a 1 (direita), y 0 (baixo) a 1 (cima). */
+/** Traçados desenhados em cima da própria foto: coordenadas normalizadas da IMAGEM, x 0 (esquerda) a 1 (direita), y 0 (topo) a 1 (base). */
 export interface Point { x: number; y: number }
-export interface DiagramBall extends Point { label: string; group: 'par' | 'impar' | 'as' | 'outra' }
-export interface DiagramPlay { name: string; level: 'verde' | 'amarelo' | 'vermelho'; chance: number; pocket: number | null; path: Point[] }
-export interface Diagram { cue: Point | null; balls: DiagramBall[]; plays: DiagramPlay[] }
+export interface DiagramPocket extends Point { n: number }
+export interface DiagramPlay { name: string; level: 'verde' | 'amarelo' | 'vermelho'; chance: number; pocket: number | null; spin: string; path: Point[]; cueEnd: Point | null }
+export interface Diagram { pockets: DiagramPocket[]; plays: DiagramPlay[] }
 export interface Plan { text: string; diagram: Diagram | null }
 
 const POINT_SCHEMA = { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number' }, y: { type: 'number' } } };
 export const PLAN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['text', 'cue', 'balls', 'plays'],
+  required: ['text', 'pockets', 'plays'],
   properties: {
     text: { type: 'string' },
-    cue: { anyOf: [POINT_SCHEMA, { type: 'null' }] },
-    balls: {
+    pockets: {
       type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['x', 'y', 'label', 'group'],
-        properties: { x: { type: 'number' }, y: { type: 'number' }, label: { type: 'string' }, group: { type: 'string', enum: ['par', 'impar', 'as', 'outra'] } },
-      },
+      items: { type: 'object', additionalProperties: false, required: ['n', 'x', 'y'], properties: { n: { type: 'integer' }, x: { type: 'number' }, y: { type: 'number' } } },
     },
     plays: {
       type: 'array',
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'level', 'chance', 'pocket', 'path'],
+        required: ['name', 'level', 'chance', 'pocket', 'spin', 'path', 'cueEnd'],
         properties: {
           name: { type: 'string' },
           level: { type: 'string', enum: ['verde', 'amarelo', 'vermelho'] },
           chance: { type: 'integer' },
           pocket: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
+          spin: { type: 'string' },
           path: { type: 'array', items: POINT_SCHEMA },
+          cueEnd: { anyOf: [POINT_SCHEMA, { type: 'null' }] },
         },
       },
     },
@@ -136,14 +144,18 @@ export const PLAN_SCHEMA = {
 
 const DIAGRAM_INSTRUCTIONS = `
 
-Além do texto, devolva um esquema aproximado da mesa para ser desenhado. Responda SOMENTE no JSON pedido:
+Além do texto, devolva os traçados para serem desenhados EM CIMA DA PRÓPRIA FOTO. Responda SOMENTE no JSON pedido.
+As coordenadas são da IMAGEM (não da mesa): x de 0 (borda esquerda da foto) a 1 (borda direita); y de 0 (topo da foto) a 1 (base da foto). Marque os pontos exatamente onde as coisas aparecem na foto. Não mova nenhuma bola: o traçado tem que sair do centro da branca de verdade e passar pelo centro da bola alvo de verdade.
 - "text": a resposta completa no formato acima (é ela que o jogador lê).
-- Coordenadas normalizadas da mesa em pé: x de 0 (lado esquerdo) a 1 (lado direito); y de 0 (borda de baixo) a 1 (borda de cima). Caçapas: 1=(0,0), 2=(1,0), 3=(0,0.5), 4=(1,0.5), 5=(0,1), 6=(1,1).
-- "cue": posição estimada da bola branca (ou null se não der para ver).
-- "balls": só as bolas relevantes que dá para ver, com "label" curto (número da bola, ou "Ás") e "group" (par, impar, as ou outra).
-- "plays": as mesmas 3 jogadas do texto, na mesma ordem. "level": verde = tranquila, amarelo = atenção, vermelho = arriscada (combine com a chance: verde a mais alta). "chance": a chance estimada em % (inteiro 0 a 100). "pocket": número da caçapa (1 a 6) ou null para defesa. "path": pontos do traçado, começando na branca, passando pela bola alvo e terminando na caçapa ou onde a branca deve parar. Em saída de tabela (travado), inclua um ponto em CADA tabela que a branca bate (x=0 ou x=1 nas laterais, y=0 ou y=1 em baixo/em cima) antes de chegar na bola alvo.
+- "pockets": a posição de cada caçapa VISÍVEL na foto, com "n" de 1 a 6 conforme a numeração padrão.
+- "plays": as mesmas 3 jogadas do texto, na mesma ordem.
+  - "level": verde = tranquila, amarelo = atenção, vermelho = arriscada (pelo risco, não pela ordem).
+  - "chance": a chance estimada em % (inteiro 0 a 100). "pocket": a caçapa (1 a 6) ou null para defesa/saída de tabela sem caçapa.
+  - "spin": o efeito em poucas palavras (ex.: "puxada média", "efeito direito, força fraca").
+  - "path": começa no centro da branca, inclui um ponto em cada tabela onde a branca bate antes da bola (se houver), passa pelo centro da bola alvo e termina na caçapa.
+  - "cueEnd": onde a branca deve parar depois da tacada (ou null).
 - São estimativas visuais: não finja precisão.
-- Se a foto não permitir avaliar, devolva "plays" e "balls" vazios, "cue" null, e explique no "text".`;
+- Se a foto não permitir avaliar, devolva "plays" e "pockets" vazios e explique no "text".`;
 
 const clamp01 = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : null);
 function toPoint(v: unknown): Point | null {
@@ -153,16 +165,17 @@ function toPoint(v: unknown): Point | null {
   return x === null || y === null ? null : { x, y };
 }
 
-/** Valida e normaliza o esquema devolvido pelo modelo; descarta o que estiver fora do formato. */
+/** Valida e normaliza os traçados devolvidos pelo modelo; descarta o que estiver fora do formato. */
 export function sanitizeDiagram(raw: unknown): Diagram | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  const balls = (Array.isArray(r.balls) ? r.balls : []).slice(0, 16).flatMap((b) => {
-    const p = toPoint(b);
-    const o = b as Record<string, unknown>;
-    if (!p) return [];
-    const group = ['par', 'impar', 'as', 'outra'].includes(o.group as string) ? (o.group as DiagramBall['group']) : 'outra';
-    return [{ ...p, label: String(o.label ?? '').slice(0, 3), group }];
+  const seen = new Set<number>();
+  const pockets = (Array.isArray(r.pockets) ? r.pockets : []).flatMap((pk) => {
+    const p = toPoint(pk);
+    const n = (pk as { n?: unknown })?.n;
+    if (!p || !Number.isInteger(n) || (n as number) < 1 || (n as number) > 6 || seen.has(n as number)) return [];
+    seen.add(n as number);
+    return [{ n: n as number, ...p }];
   });
   const plays = (Array.isArray(r.plays) ? r.plays : []).slice(0, 3).flatMap((pl) => {
     const o = pl as Record<string, unknown>;
@@ -171,10 +184,10 @@ export function sanitizeDiagram(raw: unknown): Diagram | null {
     const level = ['verde', 'amarelo', 'vermelho'].includes(o.level as string) ? (o.level as DiagramPlay['level']) : 'amarelo';
     const chance = Math.round(Math.min(100, Math.max(0, Number(o.chance) || 0)));
     const pocket = Number.isInteger(o.pocket) && (o.pocket as number) >= 1 && (o.pocket as number) <= 6 ? (o.pocket as number) : null;
-    return [{ name: String(o.name ?? '').slice(0, 60), level, chance, pocket, path }];
+    return [{ name: String(o.name ?? '').slice(0, 60), level, chance, pocket, spin: String(o.spin ?? '').slice(0, 60), path, cueEnd: toPoint(o.cueEnd) }];
   });
-  if (!plays.length && !balls.length) return null;
-  return { cue: toPoint(r.cue), balls, plays };
+  if (!plays.length) return null;
+  return { pockets, plays };
 }
 
 export interface Coach {
