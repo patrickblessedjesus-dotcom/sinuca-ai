@@ -94,9 +94,16 @@ No bolinho não tem "sai uma bola": cometeu falta, perdeu a partida.
 - **Pular a branca pra fora da mesa**: perde.
 - **Pular qualquer uma das três bolas pra fora da mesa**: perde.
 
-## Estratégia pro bolinho
+## Estratégia pro bolinho: o jogo é de DEFESA
 
-- Como **qualquer falta perde o jogo**, segurança vem primeiro: nunca sugira tacada com risco alto de cair de branca, cegar ou pular bola sem avisar com destaque.
-- Matar a primeira ou a segunda bola **só vale a pena se a branca ficar bem pra continuar**. Se matar uma bola deixar a última fácil pro adversário, pode ser melhor **não matar** e jogar de defesa.
-- Quando sobrar **a última bola**, o foco é: matar com segurança se a chance for boa; se não, **defender** deixando a branca e a última bola difíceis pro adversário, sem correr risco de falta.
-- Ao dar a chance estimada, considere sempre o risco de falta: no bolinho, uma falta é derrota, não só uma bola.
+- **No bolinho, a defesa é o mais importante.** Quase sempre o jogo chega na **última bola**, e muitas vezes ela está **colada na tabela**, difícil de matar. Aí vira uma **troca de defesas**: cada um tenta não deixar a bola fácil pro outro.
+- **Na última bola, o normal é defender, não matar.** Só sugira matar a última se a chance for realmente alta. Se não for, a melhor jogada é a **melhor defesa**.
+- **O objetivo da defesa:** deixar o adversário sem tacada boa, pra que **ele** seja obrigado a defender mal e **deixe a bola fácil pra você** matar na próxima.
+- **Uma boa defesa no bolinho:**
+  - **Encosta na bola** (nunca cega: cegar perde o jogo).
+  - Deixa a **branca longe da bola**, de preferência colada numa tabela ou atrás de outra referência, sem ângulo pro adversário.
+  - Deixa a **bola colada ou perto da tabela**, longe das caçapas, onde fica difícil de matar.
+  - **Força controlada**: sem risco de cair de branca nem de pular bola.
+- Com mais de uma bola na mesa: matar a primeira ou a segunda só vale se a branca ficar bem e não deixar a última fácil pro adversário. Senão, defenda.
+- **Como responder no bolinho quando for a última bola:** as 3 opções devem ser, de preferência, **defesas diferentes** (e no máximo uma tentativa de matar, se fizer sentido). Pra cada defesa diga **onde a branca para**, **onde a bola fica** e **por que o adversário fica sem tacada**. Na defesa, a "chance estimada" é a chance de a **defesa dar certo** (o adversário ficar sem tacada fácil e você não cometer falta). Escreva isso claramente.
+- Considere sempre o risco de falta: no bolinho, falta é derrota.
