@@ -134,7 +134,10 @@ export function createConversations(opts: ConversationOptions = {}) {
       return;
     }
     try {
-      await safeSend(deps.whatsapp, to, heardPrefix(heard) + (await deps.coach.ask(text)));
+      const started = now();
+      const reply = await deps.coach.ask(text);
+      logger.info('Pergunta respondida pela IA', { to: maskPhone(to), ms: now() - started });
+      await safeSend(deps.whatsapp, to, heardPrefix(heard) + reply);
     } catch (err) {
       logger.error('Falha ao responder texto', { to: maskPhone(to), ...errorInfo(err) });
       await safeSend(deps.whatsapp, to, MSG_TEXT);

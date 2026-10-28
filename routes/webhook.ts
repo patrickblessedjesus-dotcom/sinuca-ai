@@ -49,6 +49,23 @@ export function isAllowed(from: string, allowed: string[]): boolean {
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 && v.length <= 256 ? v : undefined);
 
+/** Registra os avisos de entrega (enviada, entregue, lida, falhou) que a Meta manda depois. */
+function logStatuses(statuses: unknown): void {
+  if (!Array.isArray(statuses)) return;
+  for (const st of statuses.slice(0, 20)) {
+    if (!isObj(st)) continue;
+    const status = str(st.status);
+    const errors = Array.isArray(st.errors) ? st.errors.filter(isObj) : [];
+    const meta = {
+      status,
+      to: maskPhone(str(st.recipient_id)),
+      ...(errors.length ? { code: errors[0].code, error: String(errors[0].title ?? errors[0].message ?? '').slice(0, 200), detail: isObj(errors[0].error_data) ? String(errors[0].error_data.details ?? '').slice(0, 200) : undefined } : {}),
+    };
+    if (status === 'failed') logger.warn('Meta não conseguiu entregar', meta);
+    else logger.info('Status de entrega', meta);
+  }
+}
+
 /** Extrai mensagens recebidas de um payload da Cloud API, ignorando status e campos malformados. */
 export function extractMessages(body: unknown): IncomingMessage[] {
   const out: IncomingMessage[] = [];
@@ -58,6 +75,7 @@ export function extractMessages(body: unknown): IncomingMessage[] {
     if (!isObj(entry) || !Array.isArray(entry.changes)) continue;
     for (const change of entry.changes) {
       if (!isObj(change) || change.field !== 'messages' || !isObj(change.value)) continue;
+      logStatuses(change.value.statuses);
       const messages = change.value.messages;
       if (!Array.isArray(messages)) continue; // eventos só de "statuses" caem aqui
       for (const m of messages) {

@@ -87,6 +87,12 @@ export function createWhatsAppClient(opts: WhatsAppOptions): WhatsAppClient {
         }
         throw err;
       }
+      try {
+        const data = (await res.json()) as { messages?: { id?: string }[]; contacts?: { wa_id?: string }[] };
+        logger.info('Mensagem aceita pela Meta', { to: maskPhone(to), waId: maskPhone(data.contacts?.[0]?.wa_id), id: data.messages?.[0]?.id?.slice(-12) });
+      } catch {
+        logger.info('Mensagem aceita pela Meta', { to: maskPhone(to) });
+      }
     },
 
     async sendImage(to, png, caption) {
