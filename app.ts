@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { createDemoRouter, type DemoOptions } from './routes/demo.js';
+import { createSiteRouter } from './routes/site.js';
 import { createTwilioRouter, type TwilioWebhookOptions } from './routes/twilio.js';
 import { createZapiRouter, type ZapiWebhookOptions } from './routes/zapi.js';
 import { createWebhookRouter, type RawBodyRequest, type WebhookOptions } from './routes/webhook.js';
@@ -29,6 +30,7 @@ export function createApp(opts: AppOptions | WebhookOptions) {
     res.type('html').send(DELETION_HTML);
   });
 
+  app.use(createSiteRouter());
   if (demo) app.use(createDemoRouter(demo));
   if (zapi) app.use(createZapiRouter(zapi));
   if (twilio) app.use(createTwilioRouter(twilio));
