@@ -71,6 +71,11 @@ export function extractMessages(body: unknown): IncomingMessage[] {
         if (type === 'image' && isObj(m.image)) {
           msg.imageId = str(m.image.id);
           msg.imageMime = str(m.image.mime_type);
+          if (typeof m.image.caption === 'string' && m.image.caption.trim()) msg.text = m.image.caption.slice(0, 2000);
+        }
+        if (type === 'audio' && isObj(m.audio)) {
+          msg.audioId = str(m.audio.id);
+          msg.audioMime = str(m.audio.mime_type);
         }
         out.push(msg);
       }

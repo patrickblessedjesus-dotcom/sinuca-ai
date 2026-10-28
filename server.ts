@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
-import { handleMessage } from './handler.js';
+import { createConversations, type RenderPlan } from './handler.js';
+import { planCaption, renderPlanImage } from './services/drawPlan.js';
 import { createCoach } from './services/sinucaCoach.js';
 import { createWhatsAppClient } from './services/whatsapp.js';
 import { createZapiClient } from './services/zapi.js';
@@ -24,6 +25,11 @@ if (config.whatsappEnabled && config.skipSignatureVerification) {
 }
 
 const coach = createCoach({ apiKey: config.openaiApiKey, model: config.openaiModel, knowledge: config.knowledge });
+const conversations = createConversations();
+const render: RenderPlan = (d, photo, mime) => {
+  const png = renderPlanImage(d, photo, mime);
+  return png ? { png, caption: planCaption(d) } : null;
+};
 
 const whatsapp = config.whatsappEnabled
   ? createWhatsAppClient({ token: config.whatsappToken, phoneNumberId: config.phoneNumberId, graphApiVersion: config.graphApiVersion })
@@ -36,7 +42,7 @@ const app = createApp({
         appSecret: config.appSecret,
         skipSignatureVerification: config.skipSignatureVerification,
         allowedNumbers: config.allowedNumbers,
-        onMessage: (msg) => handleMessage(msg, { whatsapp, coach }),
+        onMessage: (msg) => conversations.handle(msg, { whatsapp, coach, render }),
       }
     : undefined,
   demo: config.demoCode ? { code: config.demoCode, coach } : undefined,
@@ -46,7 +52,7 @@ const app = createApp({
         return {
           secret: config.zapiWebhookSecret,
           allowedNumbers: config.allowedNumbers,
-          onMessage: (msg) => handleMessage(msg, { whatsapp: zapiClient, coach }),
+          onMessage: (msg) => conversations.handle(msg, { whatsapp: zapiClient, coach }),
         };
       })()
     : undefined,
@@ -58,7 +64,7 @@ const app = createApp({
           publicUrl: config.twilioPublicUrl,
           allowedNumbers: config.allowedNumbers,
           client: twilioClient,
-          handle: (msg, wa) => handleMessage(msg, { whatsapp: wa, coach }),
+          handle: (msg, wa) => conversations.handle(msg, { whatsapp: wa, coach }),
         };
       })()
     : undefined,

@@ -28,7 +28,10 @@ export interface MediaInfo {
 export interface WhatsAppClient {
   sendText(to: string, body: string): Promise<void>;
   getMediaInfo(mediaId: string): Promise<MediaInfo>;
-  downloadMedia(info: MediaInfo): Promise<Uint8Array>;
+  /** Baixa a mídia. `maxBytes` padrão: limite de imagem (5 MB). */
+  downloadMedia(info: MediaInfo, maxBytes?: number): Promise<Uint8Array>;
+  /** Envia uma imagem PNG com legenda (opcional: nem todo canal suporta). */
+  sendImage?(to: string, png: Uint8Array, caption?: string): Promise<void>;
 }
 
 export interface WhatsAppOptions {
@@ -86,6 +89,25 @@ export function createWhatsAppClient(opts: WhatsAppOptions): WhatsAppClient {
       }
     },
 
+    async sendImage(to, png, caption) {
+      // 1) sobe o PNG pra Meta; 2) envia a mensagem de imagem com o id recebido
+      const form = new FormData();
+      form.append('messaging_product', 'whatsapp');
+      form.append('type', 'image/png');
+      form.append('file', new Blob([Buffer.from(png)], { type: 'image/png' }), 'jogadas.png');
+      const up = await doFetch(`${base}/${opts.phoneNumberId}/media`, { method: 'POST', headers: auth, body: form, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      if (!up.ok) throw await toApiError(up, 'Upload de imagem');
+      const { id } = (await up.json()) as { id?: string };
+      if (!id) throw new WhatsAppApiError('Upload de imagem sem id', 502);
+      const res = await doFetch(`${base}/${opts.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'image', image: { id, ...(caption ? { caption: caption.slice(0, 1000) } : {}) } }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!res.ok) throw await toApiError(res, 'Envio de imagem');
+    },
+
     async getMediaInfo(mediaId) {
       if (!/^\d{1,40}$/.test(mediaId)) throw new MediaError('ID de mídia inválido.');
       const res = await doFetch(`${base}/${mediaId}`, { headers: auth, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
@@ -100,9 +122,9 @@ export function createWhatsAppClient(opts: WhatsAppOptions): WhatsAppClient {
       };
     },
 
-    async downloadMedia(info) {
+    async downloadMedia(info, maxBytes = MAX_IMAGE_BYTES) {
       if (!isAllowedMediaUrl(info.url)) throw new MediaError('URL de mídia não permitida.');
-      if (info.fileSize !== undefined && info.fileSize > MAX_IMAGE_BYTES) throw new MediaError('Imagem maior que o limite.');
+      if (info.fileSize !== undefined && info.fileSize > maxBytes) throw new MediaError('Arquivo maior que o limite.');
 
       const res = await doFetch(info.url, {
         headers: { ...auth, 'User-Agent': 'sinuca-ai/0.1' },
@@ -113,7 +135,7 @@ export function createWhatsAppClient(opts: WhatsAppOptions): WhatsAppClient {
       if (res.url && !isAllowedMediaUrl(res.url)) throw new MediaError('Redirecionamento de mídia para domínio não permitido.');
 
       const declared = Number(res.headers.get('content-length'));
-      if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) throw new MediaError('Imagem maior que o limite.');
+      if (Number.isFinite(declared) && declared > maxBytes) throw new MediaError('Arquivo maior que o limite.');
       if (!res.body) throw new MediaError('Resposta de mídia vazia.');
 
       // Lê em partes e aborta se passar do limite, sem confiar no content-length.
@@ -124,9 +146,9 @@ export function createWhatsAppClient(opts: WhatsAppOptions): WhatsAppClient {
         const { done, value } = await reader.read();
         if (done) break;
         total += value.byteLength;
-        if (total > MAX_IMAGE_BYTES) {
+        if (total > maxBytes) {
           await reader.cancel();
-          throw new MediaError('Imagem maior que o limite.');
+          throw new MediaError('Arquivo maior que o limite.');
         }
         chunks.push(value);
       }

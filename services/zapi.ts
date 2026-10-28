@@ -63,13 +63,13 @@ export function createZapiClient(opts: ZapiOptions): WhatsAppClient {
       return { url };
     },
 
-    async downloadMedia(info) {
+    async downloadMedia(info, maxBytes = MAX_IMAGE_BYTES) {
       if (!isSafePublicUrl(info.url)) throw new MediaError('URL de mídia não permitida.');
       const res = await doFetch(info.url, { signal: AbortSignal.timeout(20_000) });
       if (!res.ok) throw new MediaError(`Download de mídia falhou (HTTP ${res.status}).`);
       if (res.url && !isSafePublicUrl(res.url)) throw new MediaError('Redirecionamento de mídia não permitido.');
       const declared = Number(res.headers.get('content-length'));
-      if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) throw new MediaError('Imagem maior que o limite.');
+      if (Number.isFinite(declared) && declared > maxBytes) throw new MediaError('Imagem maior que o limite.');
       if (!res.body) throw new MediaError('Resposta de mídia vazia.');
       const reader = res.body.getReader();
       const chunks: Uint8Array[] = [];
@@ -78,7 +78,7 @@ export function createZapiClient(opts: ZapiOptions): WhatsAppClient {
         const { done, value } = await reader.read();
         if (done) break;
         total += value.byteLength;
-        if (total > MAX_IMAGE_BYTES) {
+        if (total > maxBytes) {
           await reader.cancel();
           throw new MediaError('Imagem maior que o limite.');
         }

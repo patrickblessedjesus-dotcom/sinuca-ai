@@ -39,7 +39,11 @@ export function parseTwilioMessage(p: Record<string, string>): IncomingMessage |
 
   const numMedia = Number(p.NumMedia ?? '0');
   if (numMedia > 0 && p.MediaUrl0 && (p.MediaContentType0 ?? '').startsWith('image/')) {
-    return { id, from, type: 'image', imageId: p.MediaUrl0, imageMime: p.MediaContentType0 };
+    const caption = (p.Body ?? '').trim();
+    return { id, from, type: 'image', imageId: p.MediaUrl0, imageMime: p.MediaContentType0, ...(caption ? { text: caption.slice(0, 2000) } : {}) };
+  }
+  if (numMedia > 0 && p.MediaUrl0 && (p.MediaContentType0 ?? '').startsWith('audio/')) {
+    return { id, from, type: 'audio', audioId: p.MediaUrl0, audioMime: p.MediaContentType0 };
   }
   if (numMedia === 0 && typeof p.Body === 'string' && p.Body.length > 0) return { id, from, type: 'text', text: p.Body.slice(0, 2000) };
   return { id, from, type: 'other' };

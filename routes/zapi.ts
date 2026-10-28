@@ -26,7 +26,11 @@ export function parseZapiMessage(body: unknown): IncomingMessage | null {
   if (!id || !from || !/^\d{6,20}$/.test(from)) return null;
 
   if (isObj(body.image) && str(body.image.imageUrl)) {
-    return { id, from, type: 'image', imageId: str(body.image.imageUrl), imageMime: str(body.image.mimeType, 100) };
+    const caption = typeof body.image.caption === 'string' ? body.image.caption.trim() : '';
+    return { id, from, type: 'image', imageId: str(body.image.imageUrl), imageMime: str(body.image.mimeType, 100), ...(caption ? { text: caption.slice(0, 2000) } : {}) };
+  }
+  if (isObj(body.audio) && str(body.audio.audioUrl)) {
+    return { id, from, type: 'audio', audioId: str(body.audio.audioUrl), audioMime: str(body.audio.mimeType, 100) };
   }
   if (isObj(body.text) && typeof body.text.message === 'string') return { id, from, type: 'text', text: body.text.message.slice(0, 2000) };
   return { id, from, type: 'other' };
