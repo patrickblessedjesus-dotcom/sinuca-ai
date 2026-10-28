@@ -52,7 +52,7 @@ const app = createApp({
         return {
           secret: config.zapiWebhookSecret,
           allowedNumbers: config.allowedNumbers,
-          onMessage: (msg) => conversations.handle(msg, { whatsapp: zapiClient, coach }),
+          onMessage: (msg) => conversations.handle(msg, { whatsapp: zapiClient, coach, render }),
         };
       })()
     : undefined,
