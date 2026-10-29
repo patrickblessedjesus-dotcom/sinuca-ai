@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { createDemoRouter, type DemoOptions } from './routes/demo.js';
 import { createSiteRouter } from './routes/site.js';
+import { createAsaasRouter, type AsaasWebhookOptions } from './routes/asaas.js';
 import { createTwilioRouter, type TwilioWebhookOptions } from './routes/twilio.js';
 import { createZapiRouter, type ZapiWebhookOptions } from './routes/zapi.js';
 import { createWebhookRouter, type RawBodyRequest, type WebhookOptions } from './routes/webhook.js';
@@ -11,10 +12,11 @@ export interface AppOptions {
   demo?: DemoOptions;
   zapi?: ZapiWebhookOptions;
   twilio?: TwilioWebhookOptions;
+  asaas?: AsaasWebhookOptions;
 }
 
 export function createApp(opts: AppOptions | WebhookOptions) {
-  const { webhook, demo, zapi, twilio } = 'onMessage' in opts ? { webhook: opts, demo: undefined, zapi: undefined, twilio: undefined } : opts;
+  const { webhook, demo, zapi, twilio, asaas } = 'onMessage' in opts ? { webhook: opts, demo: undefined, zapi: undefined, twilio: undefined, asaas: undefined } : opts;
   const app = express();
   app.disable('x-powered-by');
 
@@ -34,6 +36,7 @@ export function createApp(opts: AppOptions | WebhookOptions) {
   if (demo) app.use(createDemoRouter(demo));
   if (zapi) app.use(createZapiRouter(zapi));
   if (twilio) app.use(createTwilioRouter(twilio));
+  if (asaas) app.use(createAsaasRouter(asaas));
 
   if (webhook) {
     // Guarda o corpo bruto para validar a assinatura HMAC da Meta. Limite de tamanho do corpo.
