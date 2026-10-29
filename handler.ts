@@ -1,6 +1,7 @@
 import type { Coach, Diagram } from './services/sinucaCoach.js';
 import type { WhatsAppClient } from './services/whatsapp.js';
 import { MediaError, validateImage, type SupportedMime } from './services/media.js';
+import { MSG_FREE_HINT, type Paywall } from './services/paywall.js';
 import { errorInfo, logger, maskPhone } from './utils/logger.js';
 
 export const MSG_TEXT =
@@ -38,6 +39,10 @@ export interface HandlerDeps {
   coach: Coach;
   /** Desenha os traçados em cima da foto (opcional). */
   render?: RenderPlan;
+  /** Cobrança: sem ele, todo mundo usa à vontade. */
+  paywall?: Paywall;
+  /** Preenchido pelo próprio handler: este número está na análise grátis. */
+  free?: boolean;
 }
 
 export interface ConversationOptions {
@@ -121,7 +126,11 @@ export function createConversations(opts: ConversationOptions = {}) {
       } else {
         await safeSend(whatsapp, to, heardPrefix(heard) + (await coach.analyze(photo.bytes, photo.mime, situation)));
       }
-      logger.info('Análise concluída', { to: maskPhone(to), ms: now() - started, situation: Boolean(situation) });
+      logger.info('Análise concluída', { to: maskPhone(to), ms: now() - started, situation: Boolean(situation), free: Boolean(deps.free) });
+      if (deps.free && deps.paywall) {
+        deps.paywall.useFree(to);
+        await safeSend(whatsapp, to, await deps.paywall.payMessage(to));
+      }
     } catch (err) {
       logger.error('Falha na análise da foto', { to: maskPhone(to), ms: now() - started, ...errorInfo(err) });
       await safeSend(whatsapp, to, MSG_ANALYSIS_ERROR);
@@ -129,6 +138,10 @@ export function createConversations(opts: ConversationOptions = {}) {
   }
 
   async function answer(to: string, text: string, heard: string | undefined, deps: HandlerDeps) {
+    if (deps.free) {
+      await safeSend(deps.whatsapp, to, MSG_FREE_HINT);
+      return;
+    }
     if (!deps.coach.ask) {
       await safeSend(deps.whatsapp, to, MSG_TEXT);
       return;
@@ -169,9 +182,18 @@ export function createConversations(opts: ConversationOptions = {}) {
     s.pendingAsk = { timer, text, heard };
   }
 
-  async function process(msg: IncomingMessage, deps: HandlerDeps) {
-    const { whatsapp, coach } = deps;
+  async function process(msg: IncomingMessage, baseDeps: HandlerDeps) {
     const to = msg.from;
+    let deps = baseDeps;
+    if (baseDeps.paywall) {
+      const access = await baseDeps.paywall.check(to);
+      if (access === 'blocked') {
+        await safeSend(baseDeps.whatsapp, to, await baseDeps.paywall.payMessage(to));
+        return;
+      }
+      deps = { ...baseDeps, free: access === 'free' };
+    }
+    const { whatsapp, coach } = deps;
 
     if (msg.type === 'text') {
       const text = msg.text?.trim();

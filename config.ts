@@ -25,6 +25,17 @@ export interface Config {
   openaiApiKey: string;
   openaiModel: string;
   knowledge: string;
+  asaas: {
+    apiKey: string;
+    sandbox: boolean;
+    webhookToken: string;
+    planName: string;
+    price: number;
+    accessDays: number;
+    freeAnalyses: number;
+    exempt: string[];
+    siteUrl: string;
+  } | null;
 }
 
 export const DEFAULT_GRAPH_API_VERSION = 'v25.0';
@@ -99,6 +110,31 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
 
   if (demoCode && demoCode.length < 6) missing.push('DEMO_CODE com pelo menos 6 caracteres');
 
+  // Cobrança (Asaas) é opcional: ativa quando ASAAS_API_KEY estiver definido.
+  let asaas: Config['asaas'] = null;
+  if (env.ASAAS_API_KEY?.trim()) {
+    const webhookToken = req('ASAAS_WEBHOOK_TOKEN');
+    if (webhookToken && !/^[A-Za-z0-9_-]{16,255}$/.test(webhookToken)) missing.push('ASAAS_WEBHOOK_TOKEN com 16+ caracteres (só letras, números, - e _)');
+    const num = (name: string, def: number) => {
+      const raw = env[name]?.trim().replace(',', '.');
+      const v = raw ? Number(raw) : def;
+      if (!Number.isFinite(v) || v < 0) missing.push(`${name} numérico`);
+      return v;
+    };
+    asaas = {
+      apiKey: env.ASAAS_API_KEY.trim(),
+      sandbox: (env.ASAAS_ENV?.trim().toLowerCase() || 'sandbox') !== 'production',
+      webhookToken,
+      planName: env.PLAN_NAME?.trim() || 'Sinuca AI Mensal',
+      price: num('PLAN_PRICE', 29.9),
+      accessDays: num('ACCESS_DAYS', 30),
+      freeAnalyses: num('FREE_ANALYSES', 1),
+      exempt: (env.FREE_NUMBERS ?? '').split(',').map((n) => n.replace(/\D/g, '')).filter(Boolean),
+      siteUrl: env.SITE_URL?.trim() || 'https://sinuca-ai.onrender.com',
+    };
+    if (asaas.price < 5) missing.push('PLAN_PRICE de pelo menos 5 (mínimo do Asaas)');
+  }
+
   if (missing.length) {
     throw new ConfigError(`Variáveis de ambiente obrigatórias ausentes: ${missing.join(', ')}. Veja o .env.example.`);
   }
@@ -139,5 +175,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
     openaiApiKey,
     openaiModel: env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL,
     knowledge,
+    asaas,
   };
 }
