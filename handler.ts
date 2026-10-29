@@ -2,6 +2,7 @@ import type { Coach, Diagram } from './services/sinucaCoach.js';
 import type { WhatsAppClient } from './services/whatsapp.js';
 import { MediaError, validateImage, type SupportedMime } from './services/media.js';
 import { MSG_FREE_HINT, type Paywall } from './services/paywall.js';
+import { choicePart, SPOKEN_PHOTO_WAIT, type Voice } from './services/voice.js';
 import { errorInfo, logger, maskPhone } from './utils/logger.js';
 
 export const MSG_TEXT =
@@ -41,6 +42,8 @@ export interface HandlerDeps {
   render?: RenderPlan;
   /** Cobrança: sem ele, todo mundo usa à vontade. */
   paywall?: Paywall;
+  /** Voz (ElevenLabs) para algumas mensagens. */
+  voice?: Voice;
   /** Preenchido pelo próprio handler: este número está na análise grátis. */
   free?: boolean;
 }
@@ -67,6 +70,19 @@ async function safeSend(whatsapp: WhatsAppClient, to: string, body: string): Pro
     return true;
   } catch (err) {
     logger.error('Falha ao enviar mensagem', { to: maskPhone(to), ...errorInfo(err) });
+    return false;
+  }
+}
+
+/** Manda um áudio falado. Devolve false se não deu (aí quem chamou manda texto). */
+async function safeVoice(deps: HandlerDeps, to: string, text: string | null, cache = false): Promise<boolean> {
+  if (!text || !deps.voice || !deps.whatsapp.sendAudio) return false;
+  try {
+    const mp3 = await deps.voice.speak(text, { cache });
+    await deps.whatsapp.sendAudio(to, mp3);
+    return true;
+  } catch (err) {
+    logger.warn('Não consegui mandar o áudio; seguindo só com texto', { to: maskPhone(to), ...errorInfo(err) });
     return false;
   }
 }
@@ -123,6 +139,7 @@ export function createConversations(opts: ConversationOptions = {}) {
           }
         }
         await safeSend(whatsapp, to, heardPrefix(heard) + plan.text);
+        await safeVoice(deps, to, choicePart(plan.text));
       } else {
         await safeSend(whatsapp, to, heardPrefix(heard) + (await coach.analyze(photo.bytes, photo.mime, situation)));
       }
@@ -263,7 +280,7 @@ export function createConversations(opts: ConversationOptions = {}) {
         return;
       }
       s.photo = photo;
-      await safeSend(whatsapp, to, MSG_PHOTO_WAIT);
+      if (!(await safeVoice(deps, to, SPOKEN_PHOTO_WAIT, true))) await safeSend(whatsapp, to, MSG_PHOTO_WAIT);
       return;
     }
 

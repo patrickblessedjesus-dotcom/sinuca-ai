@@ -25,6 +25,7 @@ export interface Config {
   openaiApiKey: string;
   openaiModel: string;
   knowledge: string;
+  voice: { apiKey: string; voiceId: string; model: string } | null;
   asaas: {
     apiKey: string;
     sandbox: boolean;
@@ -135,6 +136,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
     if (asaas.price < 5) missing.push('PLAN_PRICE de pelo menos 5 (mínimo do Asaas)');
   }
 
+  // Voz (ElevenLabs) é opcional: ativa quando ELEVENLABS_API_KEY estiver definido.
+  const voice = env.ELEVENLABS_API_KEY?.trim()
+    ? {
+        apiKey: env.ELEVENLABS_API_KEY.trim(),
+        voiceId: env.ELEVENLABS_VOICE_ID?.trim() || 'JBFqnCBsd6RMkjVDRZzb',
+        model: env.ELEVENLABS_MODEL?.trim() || 'eleven_multilingual_v2',
+      }
+    : null;
+  if (voice && !/^[A-Za-z0-9]{10,40}$/.test(voice.voiceId)) missing.push('ELEVENLABS_VOICE_ID só com letras e números');
+
   if (missing.length) {
     throw new ConfigError(`Variáveis de ambiente obrigatórias ausentes: ${missing.join(', ')}. Veja o .env.example.`);
   }
@@ -176,5 +187,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, knowledge = loa
     openaiModel: env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL,
     knowledge,
     asaas,
+    voice,
   };
 }

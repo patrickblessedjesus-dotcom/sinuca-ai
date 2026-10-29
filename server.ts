@@ -8,6 +8,7 @@ import { createWhatsAppClient } from './services/whatsapp.js';
 import { createZapiClient } from './services/zapi.js';
 import { createTwilioClient } from './services/twilio.js';
 import { createPaywall } from './services/paywall.js';
+import { createVoice } from './services/voice.js';
 import { errorInfo, logger } from './utils/logger.js';
 
 let config;
@@ -38,6 +39,7 @@ const whatsapp = config.whatsappEnabled
 const zapiClient = config.zapiEnabled
   ? createZapiClient({ instanceId: config.zapiInstanceId, token: config.zapiToken, clientToken: config.zapiClientToken })
   : undefined;
+const voice = config.voice ? createVoice(config.voice) : undefined;
 const paywall = config.asaas ? createPaywall(config.asaas) : undefined;
 // O aviso de "pagamento confirmado" sai pela Z-API se ela estiver ligada; senão pela API oficial.
 const notifier = zapiClient ?? whatsapp;
@@ -49,7 +51,7 @@ const app = createApp({
         appSecret: config.appSecret,
         skipSignatureVerification: config.skipSignatureVerification,
         allowedNumbers: config.allowedNumbers,
-        onMessage: (msg) => conversations.handle(msg, { whatsapp, coach, render, paywall }),
+        onMessage: (msg) => conversations.handle(msg, { whatsapp, coach, render, paywall, voice }),
       }
     : undefined,
   demo: config.demoCode ? { code: config.demoCode, coach } : undefined,
@@ -57,7 +59,7 @@ const app = createApp({
     ? {
         secret: config.zapiWebhookSecret,
         allowedNumbers: config.allowedNumbers,
-        onMessage: (msg) => conversations.handle(msg, { whatsapp: zapiClient, coach, render, paywall }),
+        onMessage: (msg) => conversations.handle(msg, { whatsapp: zapiClient, coach, render, paywall, voice }),
       }
     : undefined,
   asaas:
@@ -86,6 +88,7 @@ const server = app.listen(config.port, () => {
     demo: Boolean(config.demoCode),
     zapi: config.zapiEnabled,
     twilio: config.twilioEnabled,
+    voz: Boolean(config.voice),
     cobranca: config.asaas ? (config.asaas.sandbox ? 'asaas-sandbox' : 'asaas-producao') : false,
     graphApiVersion: config.graphApiVersion,
     knowledgeLoaded: config.knowledge.length > 0,

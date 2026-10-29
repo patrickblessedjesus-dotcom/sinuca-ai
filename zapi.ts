@@ -58,6 +58,20 @@ export function createZapiClient(opts: ZapiOptions): WhatsAppClient {
       logger.info('Z-API aceitou a mensagem', { to: maskPhone(to) });
     },
 
+    async sendAudio(to, mp3) {
+      const audio = 'data:audio/mpeg;base64,' + Buffer.from(mp3).toString('base64');
+      const res = await doFetch(`${base}/send-audio`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ phone: to, audio, waveform: true }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) {
+        logger.warn('Z-API recusou o áudio', { to: maskPhone(to), status: res.status });
+        throw new Error(`Z-API send-audio falhou (HTTP ${res.status})`);
+      }
+    },
+
     async sendImage(to, png, caption) {
       const image = 'data:image/png;base64,' + Buffer.from(png).toString('base64');
       const res = await doFetch(`${base}/send-image`, {
