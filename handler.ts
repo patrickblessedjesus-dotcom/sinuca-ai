@@ -20,7 +20,7 @@ export const MSG_RECEIVED = MSG_ANALYZING;
 
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
 /** Primeira mensagem tipo "oi": responde com as boas-vindas faladas. */
-const GREETING = /^\s*(oi+|ol[aá]|opa|eae+|e a[ií]|salve|fala+|bom dia|boa tarde|boa noite|hey|hello)\b[\s!.,?]*\S{0,20}[\s!.,?]*$/i;
+const GREETING = /^\s*(o+i+e*|ol[aá]+|opa+|ea[eií]+|e a[eií]+|salve+|fala+|bom dia|boa tarde|boa noite|hey|hello|tudo bem|beleza)(?![a-zà-ú])[\s!.,?]*\S{0,20}[\s!.,?]*$/i;
 export const MSG_WELCOME =
   '🎱 Manda a foto da mesa (de cima, mesa inteira) e um áudio 🎤 contando como tá o jogo, que eu te passo as jogadas.';
 export const MSG_WELCOME_FREE = `${MSG_WELCOME}\n\nSua 1ª análise é grátis! 🎁`;
@@ -64,6 +64,8 @@ export interface ConversationOptions {
 }
 
 interface Session {
+  /** Já recebeu as boas-vindas nesta sessão. */
+  greeted?: boolean;
   photo?: { bytes: Uint8Array; mime: SupportedMime; at: number };
   situation?: { text: string; at: number };
   pendingAsk?: { timer: ReturnType<typeof setTimeout>; text: string; heard?: string };
@@ -166,9 +168,9 @@ export function createConversations(opts: ConversationOptions = {}) {
     }
   }
 
-  async function answer(to: string, text: string, heard: string | undefined, deps: HandlerDeps) {
+  async function answer(to: string, text: string, heard: string | undefined, deps: HandlerDeps, welcome = false) {
     // Boas-vindas faladas no "oi" (e pra quem ainda está na análise grátis).
-    if (deps.free || GREETING.test(text)) {
+    if (deps.free || welcome || GREETING.test(text)) {
       await safeVoice(deps, to, SPOKEN_WELCOME, true);
       await safeSend(deps.whatsapp, to, deps.free ? MSG_WELCOME_FREE : MSG_WELCOME);
       return;
@@ -199,11 +201,13 @@ export function createConversations(opts: ConversationOptions = {}) {
       return;
     }
     // "Oi" e afins não são a explicação da jogada: responde as boas-vindas e não guarda nada.
-    if (GREETING.test(text)) {
+    const first = !s.greeted;
+    s.greeted = true;
+    if (GREETING.test(text) || (first && text.length <= 30 && !text.includes('?'))) {
       if (s.pendingAsk) clearTimeout(s.pendingAsk.timer);
       s.pendingAsk = undefined;
       s.situation = undefined;
-      await answer(to, text, heard, deps);
+      await answer(to, text, heard, deps, true);
       return;
     }
     // Sem foto: guarda como situação (se a foto vier logo depois, usa) e responde como pergunta.

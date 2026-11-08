@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { logger } from '../utils/logger.js';
 
 /** Voz do ElevenLabs: transforma um texto curto em MP3. */
@@ -25,12 +27,27 @@ function cutAtSentence(t: string, max: number): string {
 export function createVoice(opts: VoiceOptions): Voice {
   const doFetch = opts.fetchImpl ?? fetch;
   const cache = new Map<string, Uint8Array>();
+  // Áudios gravados de verdade pelo Felipinho (MP3 na raiz do projeto) substituem a voz clonada.
+  for (const [file, text] of Object.entries(RECORDED)) {
+    const path = resolve(process.cwd(), file);
+    try {
+      if (existsSync(path)) {
+        const bytes = new Uint8Array(readFileSync(path));
+        if (bytes.byteLength > 1000) {
+          cache.set(text.trim(), bytes);
+          logger.info('Áudio gravado carregado', { file, kb: Math.round(bytes.byteLength / 1024) });
+        }
+      }
+    } catch {
+      /* sem o arquivo: usa a voz clonada */
+    }
+  }
 
   return {
     async speak(text, { cache: useCache = false } = {}) {
       const clean = cutAtSentence(text.trim(), MAX_CHARS);
       if (!clean) throw new Error('Texto vazio para a voz.');
-      const hit = useCache ? cache.get(clean) : undefined;
+      const hit = cache.get(text.trim()) ?? (useCache ? cache.get(clean) : undefined);
       if (hit) return hit;
       const res = await doFetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(opts.voiceId)}?output_format=mp3_44100_128`, {
         method: 'POST',
@@ -83,10 +100,19 @@ export function choiceText(analysis: string): string | null {
 
 /** Mensagens faladas com a voz do Felipinho (ficam em cache: o ElevenLabs só cobra a primeira vez). */
 export const SPOKEN_WELCOME =
-  'Fala, meu parceiro! Aqui é o Felipinho, o rei da puxadinha. Eu vou te ajudar a ganhar essa partida. Tá jogando o quê, bolinho ou par ou ímpar? Manda uma foto da mesa aí, de cima, pegando a mesa inteira, e me conta num áudio como tá o jogo, que a gente vê o que tá acontecendo.';
+  'E aí, meu parceiro! Aqui é o Felipinho, o rei da puxadinha. Manda a foto da mesa aí, que a gente vê o que tá acontecendo.';
 export const SPOKEN_PHOTO_WAIT =
   'Boa, recebi a mesa! Agora me manda um áudio contando como tá o jogo: se é bolinho ou par ou ímpar, quantas bolas cada um tem, e o que você tá pensando em fazer.';
 export const SPOKEN_AFTER_FREE =
   'E aí, curtiu? Essa foi tua análise grátis. Pra continuar comigo em todas as partidas, libera teu acesso no link aqui embaixo. Assim que pagar, eu te aviso e a gente segue jogando.';
 export const SPOKEN_BLOCKED = 'Pra eu continuar te passando as jogadas, libera teu acesso no link aqui embaixo, que é rapidinho.';
 export const SPOKEN_PAID = 'Pagamento confirmado, tá liberado! Agora manda a foto da mesa, que a gente vai pra cima.';
+
+/** Arquivo gravado (na raiz do GitHub) → mensagem que ele substitui. */
+const RECORDED: Record<string, string> = {
+  'boas-vindas.mp3': SPOKEN_WELCOME,
+  'foto-recebida.mp3': SPOKEN_PHOTO_WAIT,
+  'analise-gratis.mp3': SPOKEN_AFTER_FREE,
+  'acesso-bloqueado.mp3': SPOKEN_BLOCKED,
+  'pagamento-confirmado.mp3': SPOKEN_PAID,
+};
