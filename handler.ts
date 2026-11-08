@@ -1,8 +1,8 @@
 import type { Coach, Diagram } from './services/sinucaCoach.js';
 import type { WhatsAppClient } from './services/whatsapp.js';
 import { MediaError, validateImage, type SupportedMime } from './services/media.js';
-import { MSG_FREE_HINT, MSG_PAID, type Paywall } from './services/paywall.js';
-import { choicePart, SPOKEN_PHOTO_WAIT, type Voice } from './services/voice.js';
+import { MSG_PAID, type Paywall } from './services/paywall.js';
+import { choicePart, choiceText, toSpeech, SPOKEN_AFTER_FREE, SPOKEN_BLOCKED, SPOKEN_PHOTO_WAIT, SPOKEN_WELCOME, type Voice } from './services/voice.js';
 import { errorInfo, logger, maskPhone } from './utils/logger.js';
 
 export const MSG_TEXT =
@@ -19,6 +19,11 @@ export const MSG_BAD_IMAGE = 'Não consegui abrir essa foto. 📸 Manda de novo,
 export const MSG_RECEIVED = MSG_ANALYZING;
 
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+/** Primeira mensagem tipo "oi": responde com as boas-vindas faladas. */
+const GREETING = /^\s*(oi+|ol[aá]|opa|eae+|e a[ií]|salve|fala+|bom dia|boa tarde|boa noite|hey|hello)\b[\s!.,?]*\S{0,20}[\s!.,?]*$/i;
+export const MSG_WELCOME =
+  '🎱 Manda a foto da mesa (de cima, mesa inteira) e um áudio 🎤 contando como tá o jogo, que eu te passo as jogadas.';
+export const MSG_WELCOME_FREE = `${MSG_WELCOME}\n\nSua 1ª análise é grátis! 🎁`;
 const ONLY_TABLE = /^\s*(analisa|analise|analisar|vai|bora|s[oó] a mesa|l[eê] a mesa)\b/i;
 
 export interface IncomingMessage {
@@ -130,22 +135,29 @@ export function createConversations(opts: ConversationOptions = {}) {
     try {
       if (coach.plan) {
         const plan = await coach.plan(photo.bytes, photo.mime, situation);
+        let imageSent = false;
         if (plan.diagram && deps.render && whatsapp.sendImage) {
           try {
             const img = deps.render(plan.diagram, photo.bytes, photo.mime);
-            if (img) await whatsapp.sendImage(to, img.png, img.caption);
+            if (img) {
+              await whatsapp.sendImage(to, img.png, img.caption);
+              imageSent = true;
+            }
           } catch (err) {
             logger.warn('Não consegui mandar a imagem das jogadas; seguindo só com o texto', errorInfo(err));
           }
         }
-        await safeSend(whatsapp, to, heardPrefix(heard) + plan.text);
-        await safeVoice(deps, to, choicePart(plan.text));
+        // Com a imagem (que já lista as 3 jogadas), o texto é só a melhor escolha.
+        const text = (imageSent && choiceText(plan.text)) || plan.text;
+        await safeSend(whatsapp, to, heardPrefix(heard) + text);
+        await safeVoice(deps, to, plan.speech ? toSpeech(plan.speech) : choicePart(plan.text));
       } else {
         await safeSend(whatsapp, to, heardPrefix(heard) + (await coach.analyze(photo.bytes, photo.mime, situation)));
       }
       logger.info('Análise concluída', { to: maskPhone(to), ms: now() - started, situation: Boolean(situation), free: Boolean(deps.free) });
       if (deps.free && deps.paywall) {
         deps.paywall.useFree(to);
+        await safeVoice(deps, to, SPOKEN_AFTER_FREE, true);
         await safeSend(whatsapp, to, await deps.paywall.payMessage(to));
       }
     } catch (err) {
@@ -155,8 +167,10 @@ export function createConversations(opts: ConversationOptions = {}) {
   }
 
   async function answer(to: string, text: string, heard: string | undefined, deps: HandlerDeps) {
-    if (deps.free) {
-      await safeSend(deps.whatsapp, to, MSG_FREE_HINT);
+    // Boas-vindas faladas no "oi" (e pra quem ainda está na análise grátis).
+    if (deps.free || GREETING.test(text)) {
+      await safeVoice(deps, to, SPOKEN_WELCOME, true);
+      await safeSend(deps.whatsapp, to, deps.free ? MSG_WELCOME_FREE : MSG_WELCOME);
       return;
     }
     if (!deps.coach.ask) {
@@ -167,7 +181,8 @@ export function createConversations(opts: ConversationOptions = {}) {
       const started = now();
       const reply = await deps.coach.ask(text);
       logger.info('Pergunta respondida pela IA', { to: maskPhone(to), ms: now() - started });
-      await safeSend(deps.whatsapp, to, heardPrefix(heard) + reply);
+      // Resposta em áudio com a voz; se a voz falhar, vai em texto.
+      if (!(await safeVoice(deps, to, toSpeech(reply)))) await safeSend(deps.whatsapp, to, heardPrefix(heard) + reply);
     } catch (err) {
       logger.error('Falha ao responder texto', { to: maskPhone(to), ...errorInfo(err) });
       await safeSend(deps.whatsapp, to, MSG_TEXT);
@@ -227,10 +242,20 @@ export function createConversations(opts: ConversationOptions = {}) {
         access = await baseDeps.paywall.check(to);
       }
       if (access === 'blocked') {
+        await safeVoice(baseDeps, to, SPOKEN_BLOCKED, true);
         await safeSend(baseDeps.whatsapp, to, await baseDeps.paywall.payMessage(to));
         return;
       }
       deps = { ...baseDeps, free: access === 'free' };
+      // Plano Só Texto: sem áudio com a voz.
+      const planOf = (baseDeps.paywall as Paywall & { plan?: (phone: string) => Promise<string | null> }).plan;
+      if (access === 'paid' && planOf && deps.voice) {
+        try {
+          if ((await planOf(to)) === 'texto') deps = { ...deps, voice: undefined };
+        } catch (err) {
+          logger.warn('Não consegui ler o plano', errorInfo(err));
+        }
+      }
     }
     const { whatsapp, coach } = deps;
 

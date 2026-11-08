@@ -12,7 +12,15 @@ export interface VoiceOptions {
   fetchImpl?: typeof fetch;
 }
 
-const MAX_CHARS = 700;
+const MAX_CHARS = 900;
+
+/** Corta no fim de uma frase para o áudio não terminar no meio. */
+function cutAtSentence(t: string, max: number): string {
+  if (t.length <= max) return t;
+  const part = t.slice(0, max);
+  const end = Math.max(part.lastIndexOf('. '), part.lastIndexOf('! '), part.lastIndexOf('? '));
+  return end > max * 0.5 ? part.slice(0, end + 1) : part;
+}
 
 export function createVoice(opts: VoiceOptions): Voice {
   const doFetch = opts.fetchImpl ?? fetch;
@@ -20,7 +28,7 @@ export function createVoice(opts: VoiceOptions): Voice {
 
   return {
     async speak(text, { cache: useCache = false } = {}) {
-      const clean = text.trim().slice(0, MAX_CHARS);
+      const clean = cutAtSentence(text.trim(), MAX_CHARS);
       if (!clean) throw new Error('Texto vazio para a voz.');
       const hit = useCache ? cache.get(clean) : undefined;
       if (hit) return hit;
@@ -64,5 +72,21 @@ export function choicePart(analysis: string): string | null {
   return spoken.length >= 10 ? spoken : null;
 }
 
+/** Recorta só o bloco "Minha escolha" (texto, com emojis) para mandar depois da imagem. */
+export function choiceText(analysis: string): string | null {
+  const i = analysis.search(/minha escolha/i);
+  if (i < 0) return null;
+  const start = analysis.lastIndexOf('\n', i) + 1;
+  const t = analysis.slice(start).trim();
+  return t.length >= 10 ? t : null;
+}
+
+/** Mensagens faladas com a voz do Felipinho (ficam em cache: o ElevenLabs só cobra a primeira vez). */
+export const SPOKEN_WELCOME =
+  'Fala, meu parceiro! Aqui é o Felipinho, o rei da puxadinha. Eu vou te ajudar a ganhar essa partida. Tá jogando o quê, bolinho ou par ou ímpar? Manda uma foto da mesa aí, de cima, pegando a mesa inteira, e me conta num áudio como tá o jogo, que a gente vê o que tá acontecendo.';
 export const SPOKEN_PHOTO_WAIT =
-  'Recebi a mesa! Agora me manda um áudio contando a situação: qual é o jogo, par ou ímpar ou bolinho, quantas bolas cada um tem, e o que você tá pensando. Se quiser só a leitura da mesa, escreve analisa.';
+  'Boa, recebi a mesa! Agora me manda um áudio contando como tá o jogo: se é bolinho ou par ou ímpar, quantas bolas cada um tem, e o que você tá pensando em fazer.';
+export const SPOKEN_AFTER_FREE =
+  'E aí, curtiu? Essa foi tua análise grátis. Pra continuar comigo em todas as partidas, libera teu acesso no link aqui embaixo. Assim que pagar, eu te aviso e a gente segue jogando.';
+export const SPOKEN_BLOCKED = 'Pra eu continuar te passando as jogadas, libera teu acesso no link aqui embaixo, que é rapidinho.';
+export const SPOKEN_PAID = 'Pagamento confirmado, tá liberado! Agora manda a foto da mesa, que a gente vai pra cima.';

@@ -9,7 +9,7 @@ import { createZapiClient } from './services/zapi.js';
 import { createTwilioClient } from './services/twilio.js';
 import { createPaywall, createHotmartPaywall, createMemoryStore, createPgStore, loadHotmartConfig, createHotmartRouter } from './services/paywall.js';
 import express from 'express';
-import { createVoice } from './services/voice.js';
+import { createVoice, SPOKEN_PAID } from './services/voice.js';
 import { errorInfo, logger } from './utils/logger.js';
 
 let config;
@@ -64,6 +64,18 @@ if (hotmartConfig) {
 }
 // O aviso de "pagamento confirmado" sai pela Z-API se ela estiver ligada; senão pela API oficial.
 const notifier = zapiClient ?? whatsapp;
+/** Aviso de pagamento: texto + áudio com a voz (se der). */
+const notifyPaid = async (phone: string, text: string) => {
+  if (!notifier) return;
+  await notifier.sendText(phone, text);
+  if (voice && notifier.sendAudio) {
+    try {
+      await notifier.sendAudio(phone, await voice.speak(SPOKEN_PAID, { cache: true }));
+    } catch (err) {
+      logger.warn('Não consegui mandar o áudio de pagamento confirmado', errorInfo(err));
+    }
+  }
+};
 
 const hotmartPaywall = hotmartConfig ? paywall : undefined;
 const inner = createApp({
@@ -86,7 +98,7 @@ const inner = createApp({
     : undefined,
   asaas:
     !hotmartConfig && paywall && config.asaas && notifier
-      ? { token: config.asaas.webhookToken, paywall, notify: (phone, text) => notifier.sendText(phone, text) }
+      ? { token: config.asaas.webhookToken, paywall, notify: notifyPaid }
       : undefined,
   twilio: config.twilioEnabled
     ? (() => {
@@ -106,7 +118,7 @@ const inner = createApp({
 const app = express();
 app.disable('x-powered-by');
 if (hotmartConfig && hotmartPaywall && notifier) {
-  app.use(createHotmartRouter({ hottok: hotmartConfig.hottok, paywall: hotmartPaywall, notify: (phone, text) => notifier.sendText(phone, text) }));
+  app.use(createHotmartRouter({ hottok: hotmartConfig.hottok, paywall: hotmartPaywall, notify: notifyPaid }));
 }
 app.use(inner);
 
