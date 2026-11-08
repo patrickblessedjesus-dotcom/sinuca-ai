@@ -7,7 +7,8 @@ import { createCoach } from './services/sinucaCoach.js';
 import { createWhatsAppClient } from './services/whatsapp.js';
 import { createZapiClient } from './services/zapi.js';
 import { createTwilioClient } from './services/twilio.js';
-import { createPaywall } from './services/paywall.js';
+import { createPaywall, createHotmartPaywall, createMemoryStore, createPgStore, loadHotmartConfig, createHotmartRouter } from './services/paywall.js';
+import express from 'express';
 import { createVoice } from './services/voice.js';
 import { errorInfo, logger } from './utils/logger.js';
 
@@ -40,11 +41,32 @@ const zapiClient = config.zapiEnabled
   ? createZapiClient({ instanceId: config.zapiInstanceId, token: config.zapiToken, clientToken: config.zapiClientToken })
   : undefined;
 const voice = config.voice ? createVoice(config.voice) : undefined;
-const paywall = config.asaas ? createPaywall(config.asaas) : undefined;
+let hotmartConfig;
+try {
+  hotmartConfig = loadHotmartConfig();
+} catch (err) {
+  console.error(`[config] ${(err as Error).message}`);
+  process.exit(1);
+}
+let paywall = config.asaas ? createPaywall(config.asaas) : undefined;
+let dbOk = false;
+if (hotmartConfig) {
+  let store = hotmartConfig.databaseUrl ? createPgStore(hotmartConfig.databaseUrl) : createMemoryStore();
+  try {
+    await store.init();
+    dbOk = store.persistent;
+  } catch (err) {
+    logger.error('Não consegui abrir o banco: usando memória (quem pagou some se o servidor reiniciar)', errorInfo(err));
+    store = createMemoryStore();
+  }
+  if (!store.persistent) logger.warn('Hotmart SEM banco (DATABASE_URL): quem pagou some quando o servidor reinicia.');
+  paywall = createHotmartPaywall({ ...hotmartConfig, store });
+}
 // O aviso de "pagamento confirmado" sai pela Z-API se ela estiver ligada; senão pela API oficial.
 const notifier = zapiClient ?? whatsapp;
 
-const app = createApp({
+const hotmartPaywall = hotmartConfig ? paywall : undefined;
+const inner = createApp({
   webhook: whatsapp
     ? {
         verifyToken: config.verifyToken,
@@ -63,7 +85,7 @@ const app = createApp({
       }
     : undefined,
   asaas:
-    paywall && config.asaas && notifier
+    !hotmartConfig && paywall && config.asaas && notifier
       ? { token: config.asaas.webhookToken, paywall, notify: (phone, text) => notifier.sendText(phone, text) }
       : undefined,
   twilio: config.twilioEnabled
@@ -80,6 +102,14 @@ const app = createApp({
     : undefined,
 });
 
+// Webhook da Hotmart fica na frente do resto do app.
+const app = express();
+app.disable('x-powered-by');
+if (hotmartConfig && hotmartPaywall && notifier) {
+  app.use(createHotmartRouter({ hottok: hotmartConfig.hottok, paywall: hotmartPaywall, notify: (phone, text) => notifier.sendText(phone, text) }));
+}
+app.use(inner);
+
 const server = app.listen(config.port, () => {
   logger.info('Sinuca AI no ar', {
     port: config.port,
@@ -89,7 +119,8 @@ const server = app.listen(config.port, () => {
     zapi: config.zapiEnabled,
     twilio: config.twilioEnabled,
     voz: Boolean(config.voice),
-    cobranca: config.asaas ? (config.asaas.sandbox ? 'asaas-sandbox' : 'asaas-producao') : false,
+    cobranca: hotmartConfig ? 'hotmart' : config.asaas ? (config.asaas.sandbox ? 'asaas-sandbox' : 'asaas-producao') : false,
+    banco: dbOk,
     graphApiVersion: config.graphApiVersion,
     knowledgeLoaded: config.knowledge.length > 0,
     allowedNumbers: config.allowedNumbers.length,

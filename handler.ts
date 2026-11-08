@@ -1,7 +1,7 @@
 import type { Coach, Diagram } from './services/sinucaCoach.js';
 import type { WhatsAppClient } from './services/whatsapp.js';
 import { MediaError, validateImage, type SupportedMime } from './services/media.js';
-import { MSG_FREE_HINT, type Paywall } from './services/paywall.js';
+import { MSG_FREE_HINT, MSG_PAID, type Paywall } from './services/paywall.js';
 import { choicePart, SPOKEN_PHOTO_WAIT, type Voice } from './services/voice.js';
 import { errorInfo, logger, maskPhone } from './utils/logger.js';
 
@@ -203,7 +203,29 @@ export function createConversations(opts: ConversationOptions = {}) {
     const to = msg.from;
     let deps = baseDeps;
     if (baseDeps.paywall) {
-      const access = await baseDeps.paywall.check(to);
+      let access = await baseDeps.paywall.check(to);
+      // Pagou pela Hotmart mas não foi reconhecido: manda o e-mail da compra pra liberar.
+      const claim = (baseDeps.paywall as Paywall & { claim?: (phone: string, text: string) => Promise<string> }).claim;
+      if (access !== 'paid' && claim && msg.type === 'text' && msg.text?.includes('@')) {
+        try {
+          const r = await claim(to, msg.text);
+          if (r === 'ok') {
+            await safeSend(baseDeps.whatsapp, to, MSG_PAID);
+            return;
+          }
+          if (r === 'notfound') {
+            await safeSend(
+              baseDeps.whatsapp,
+              to,
+              'Não achei compra aprovada com esse e-mail. 🤔 Confere se é o mesmo e-mail da Hotmart. Se pagou no boleto ou o Pix ainda está processando, espera uns minutinhos e manda de novo.',
+            );
+            return;
+          }
+        } catch (err) {
+          logger.error('Falha ao liberar pelo e-mail', { to: maskPhone(to), ...errorInfo(err) });
+        }
+        access = await baseDeps.paywall.check(to);
+      }
       if (access === 'blocked') {
         await safeSend(baseDeps.whatsapp, to, await baseDeps.paywall.payMessage(to));
         return;
