@@ -198,6 +198,14 @@ export function createConversations(opts: ConversationOptions = {}) {
       await analyze(to, photo, ONLY_TABLE.test(text) ? undefined : text, heard, deps);
       return;
     }
+    // "Oi" e afins não são a explicação da jogada: responde as boas-vindas e não guarda nada.
+    if (GREETING.test(text)) {
+      if (s.pendingAsk) clearTimeout(s.pendingAsk.timer);
+      s.pendingAsk = undefined;
+      s.situation = undefined;
+      await answer(to, text, heard, deps);
+      return;
+    }
     // Sem foto: guarda como situação (se a foto vier logo depois, usa) e responde como pergunta.
     s.situation = { text, at: now() };
     if (askDelay <= 0) {
@@ -320,12 +328,8 @@ export function createConversations(opts: ConversationOptions = {}) {
         await analyze(to, photo, text, heard, deps);
         return;
       }
-      if (s.situation && now() - s.situation.at <= situationTtl) {
-        const text = s.situation.text;
-        s.situation = undefined;
-        await analyze(to, photo, text, undefined, deps);
-        return;
-      }
+      // Regra: foto sozinha nunca analisa direto. Pede o áudio contando a situação primeiro.
+      s.situation = undefined;
       s.photo = photo;
       if (!(await safeVoice(deps, to, SPOKEN_PHOTO_WAIT, true))) await safeSend(whatsapp, to, MSG_PHOTO_WAIT);
       return;
