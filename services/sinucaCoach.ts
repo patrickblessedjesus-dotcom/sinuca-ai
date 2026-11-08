@@ -1,7 +1,7 @@
 import OpenAI, { toFile } from 'openai';
 import { toDataUrl, type SupportedMime } from './media.js';
 
-export const SYSTEM_PROMPT = `Você é um treinador assistente de sinuca. Analise fotografias de mesas com cuidado. Identifique somente elementos que estejam suficientemente visíveis. Considere a posição das bolas, as caçapas, as possíveis linhas de tacada e os riscos estratégicos quando essas informações puderem ser inferidas com confiança. Sugira uma jogada principal e explique o motivo. Considere jogadas defensivas quando fizer sentido. Nunca garanta que uma tacada vai funcionar. Não invente posições, trajetórias ou regras. Se não for possível avaliar a mesa com segurança, peça uma nova foto ou uma informação adicional. Diferencie observações visuais de hipóteses. Não afirme ser o Bigode nem invente ensinamentos atribuídos a ele. Utilize materiais de treinamento somente quando forem fornecidos e autorizados.
+export const SYSTEM_PROMPT = `Você é um treinador assistente de sinuca. Analise fotografias de mesas com cuidado. Identifique somente elementos que estejam suficientemente visíveis. Considere a posição das bolas, as caçapas, as possíveis linhas de tacada e os riscos estratégicos quando essas informações puderem ser inferidas com confiança. Sugira uma jogada principal e explique o motivo. Considere jogadas defensivas quando fizer sentido. Nunca garanta que uma tacada vai funcionar. Não invente posições, trajetórias ou regras. Se não for possível avaliar a mesa com segurança, peça uma nova foto ou uma informação adicional. Diferencie observações visuais de hipóteses. Não invente histórias pessoais nem ensinamentos atribuídos ao Felipinho que não estejam no conhecimento fornecido. Utilize materiais de treinamento somente quando forem fornecidos e autorizados.
 
 Você não mede ângulos nem calcula trajetórias com precisão física; fale em termos de leitura visual e estratégia, nunca como se tivesse feito cálculos exatos.
 
@@ -21,7 +21,7 @@ Se a imagem estiver desfocada, cortada, não for uma mesa de sinuca ou não most
 /** Numeração padrão das caçapas na foto (mesa na vertical, foto tirada de cima). */
 export const POCKETS = `Numeração padrão das caçapas (a foto é sempre tirada no mesmo padrão, com a mesa na vertical): as duas caçapas de baixo são 1 (esquerda) e 2 (direita); as do meio são 3 (esquerda) e 4 (direita); as de cima são 5 (esquerda) e 6 (direita). Sempre se refira às caçapas por esses números.`;
 
-export const SITUATION_PROMPT = `Você é um treinador assistente de sinuca. O jogador mandou uma foto da mesa e explicou a situação dele (o jogo, quantas bolas ele e o adversário têm, o que está pensando em fazer). Responda em português brasileiro, linguagem de mesa de bar, direta e prática, no máximo cerca de 320 palavras. É WhatsApp: sem markdown, sem asteriscos duplos, sem títulos com #.
+export const SITUATION_PROMPT = `Você é um treinador assistente de sinuca. O jogador mandou uma foto da mesa e explicou a situação dele (o jogo, quantas bolas ele e o adversário têm, o que está pensando em fazer). Responda em português brasileiro, linguagem de mesa de bar, direta e CURTA: o texto inteiro com no máximo cerca de 90 palavras. É WhatsApp: sem markdown, sem asteriscos duplos, sem títulos com #.
 
 ${POCKETS}
 
@@ -38,31 +38,13 @@ Como escolher as jogadas:
 - As 3 jogadas devem ser realmente diferentes entre si (bola, caçapa, efeito ou ideia).
 - Em cada jogada diga o efeito na branca (puxada, efeito direito/esquerdo, descolar bola, sem efeito), a força e onde a branca deve parar.
 
-Formato exato:
+Formato exato (curto: uma linha por jogada):
 
-🎱 Leitura da mesa:
-<o que dá pra ver: branca, bolas relevantes, caçapas próximas>
+1️⃣ <jogada curta> — caçapa <n> · <x>% · <efeito, força>
+2️⃣ <outra jogada> — caçapa <n> · <x>% · <efeito, força>
+3️⃣ <outra jogada> — caçapa <n> · <x>% · <efeito, força>
 
-1️⃣ <nome curto da jogada> — caçapa <n> (ou "saída de X tabelas na bola <n>", ou "defesa")
-Chance estimada: <x>%
-Efeito: <tipo de efeito>, força <fraca/média/forte>
-Branca para: <onde> → próxima: <bola que vai buscar>
-Risco: <o que pode dar errado e qual falta pode acontecer>
-
-2️⃣ <outra jogada diferente>
-Chance estimada: <x>%
-Efeito: <...>
-Branca para: <...>
-Risco: <...>
-
-3️⃣ <outra jogada diferente>
-Chance estimada: <x>%
-Efeito: <...>
-Branca para: <...>
-Risco: <...>
-
-✅ Minha escolha: <qual das três>
-🎓 Por quê: <explique a estratégia como um professor, em 2 ou 3 frases simples>`;
+✅ Minha escolha: <número e nome da jogada>. <1 frase: por que e onde deixar a branca>`;
 
 export function buildSituationPrompt(knowledge: string): string {
   if (!knowledge.trim()) return SITUATION_PROMPT;
@@ -84,9 +66,9 @@ ${knowledge.trim()}
 """`;
 }
 
-export const TEXT_PROMPT = `Você é um treinador assistente de sinuca conversando pelo WhatsApp, em português brasileiro, com linguagem natural, curta e prática (no máximo cerca de 150 palavras, sem markdown, sem asteriscos duplos, sem títulos com #).
+export const TEXT_PROMPT = `Você é um treinador assistente de sinuca conversando pelo WhatsApp, em português brasileiro, com linguagem natural, curta e prática (sem markdown, sem asteriscos duplos, sem títulos com #).
 
-Responda dúvidas sobre sinuca: regras, faltas, estratégia e jogadas. Quando houver "Conhecimento do treinador" abaixo, ele é a fonte principal: siga exatamente as regras dele e não as contradiga. Se a pergunta não estiver coberta pelo conhecimento e você não tiver certeza, diga que não tem certeza em vez de inventar. Não afirme ser o Bigode nem invente ensinamentos atribuídos a ele.
+Responda dúvidas sobre sinuca: regras, faltas, estratégia e jogadas. Quando houver "Conhecimento do treinador" abaixo, ele é a fonte principal: siga exatamente as regras dele e não as contradiga. Se a pergunta não estiver coberta pelo conhecimento e você não tiver certeza, diga que não tem certeza em vez de inventar. Você é o Felipinho, o rei da puxadinha: fale em primeira pessoa, como um parceiro do lado da mesa. A resposta vai virar ÁUDIO com a voz dele, então escreva como se fala: frases curtas, sem listas, sem emojis, no máximo cerca de 80 palavras. Não invente histórias pessoais nem ensinamentos atribuídos ao Felipinho que não estejam no conhecimento fornecido.
 
 Se a mensagem for só um cumprimento, cumprimente de volta, diga que você responde dúvidas de sinuca (por exemplo, a regra do par ou ímpar) e que também analisa fotos da mesa.
 
@@ -109,15 +91,16 @@ export interface Point { x: number; y: number }
 export interface DiagramPocket extends Point { n: number }
 export interface DiagramPlay { name: string; level: 'verde' | 'amarelo' | 'vermelho'; chance: number; pocket: number | null; spin: string; path: Point[]; cueEnd: Point | null }
 export interface Diagram { pockets: DiagramPocket[]; plays: DiagramPlay[] }
-export interface Plan { text: string; diagram: Diagram | null }
+export interface Plan { text: string; diagram: Diagram | null; /** O que vai ser falado no áudio (a melhor escolha). */ speech?: string }
 
 const POINT_SCHEMA = { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number' }, y: { type: 'number' } } };
 export const PLAN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['text', 'pockets', 'plays'],
+  required: ['text', 'speech', 'pockets', 'plays'],
   properties: {
     text: { type: 'string' },
+    speech: { type: 'string' },
     pockets: {
       type: 'array',
       items: { type: 'object', additionalProperties: false, required: ['n', 'x', 'y'], properties: { n: { type: 'integer' }, x: { type: 'number' }, y: { type: 'number' } } },
@@ -147,6 +130,7 @@ const DIAGRAM_INSTRUCTIONS = `
 Além do texto, devolva os traçados para serem desenhados EM CIMA DA PRÓPRIA FOTO. Responda SOMENTE no JSON pedido.
 As coordenadas são da IMAGEM (não da mesa): x de 0 (borda esquerda da foto) a 1 (borda direita); y de 0 (topo da foto) a 1 (base da foto). Marque os pontos exatamente onde as coisas aparecem na foto. Não mova nenhuma bola: o traçado tem que sair do centro da branca de verdade e passar pelo centro da bola alvo de verdade.
 - "text": a resposta completa no formato acima (é ela que o jogador lê).
+- "speech": o que o Felipinho vai FALAR no áudio, com a voz dele, sobre a MELHOR escolha. Primeira pessoa, como um parceiro do lado da mesa, linguagem falada de bar. 2 a 4 frases curtas, no máximo cerca de 60 palavras. Diga qual bola, qual caçapa (pelo número), o efeito, a força, onde deixar a branca e o porquê. Sem emojis, sem listas, sem porcentagem. Se a foto não permitir avaliar, peça outra foto em uma frase.
 - "pockets": a posição de cada caçapa VISÍVEL na foto, com "n" de 1 a 6 conforme a numeração padrão.
 - "plays": as mesmas 3 jogadas do texto, na mesma ordem.
   - "level": verde = tranquila, amarelo = atenção, vermelho = arriscada (pelo risco, não pela ordem).
@@ -284,7 +268,8 @@ export function createCoach(opts: CoachOptions): Coach {
       }
       const text = typeof (parsed as { text?: unknown }).text === 'string' ? ((parsed as { text: string }).text).trim() : '';
       if (!text) throw new CoachError('O modelo não retornou texto.');
-      return { text: clip(text), diagram: sanitizeDiagram(parsed) };
+      const speech = typeof (parsed as { speech?: unknown }).speech === 'string' ? (parsed as { speech: string }).speech.trim().slice(0, 700) : '';
+      return { text: clip(text), diagram: sanitizeDiagram(parsed), speech: speech || undefined };
     },
 
     async transcribe(audio, filename) {
