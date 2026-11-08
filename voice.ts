@@ -101,6 +101,8 @@ export function choiceText(analysis: string): string | null {
 /** Mensagens faladas com a voz do Felipinho (ficam em cache: o ElevenLabs só cobra a primeira vez). */
 export const SPOKEN_WELCOME =
   'E aí, meu parceiro! Aqui é o Felipinho, o rei da puxadinha. Manda a foto da mesa aí, que a gente vê o que tá acontecendo.';
+export const SPOKEN_HOW_TO_PHOTO =
+  'Ó, tira a foto assim: de cima, pegando a mesa inteira, com as seis caçapas aparecendo, igual essa aqui.';
 export const SPOKEN_PHOTO_WAIT =
   'Boa, recebi a mesa! Agora me manda um áudio contando como tá o jogo: se é bolinho ou par ou ímpar, quantas bolas cada um tem, e o que você tá pensando em fazer.';
 export const SPOKEN_AFTER_FREE =
@@ -111,6 +113,7 @@ export const SPOKEN_PAID = 'Pagamento confirmado, tá liberado! Agora manda a fo
 /** Arquivo gravado (na raiz do GitHub) → mensagem que ele substitui. */
 const RECORDED: Record<string, string> = {
   'boas-vindas.mp3': SPOKEN_WELCOME,
+  'como-tirar-foto.mp3': SPOKEN_HOW_TO_PHOTO,
   'foto-recebida.mp3': SPOKEN_PHOTO_WAIT,
   'analise-gratis.mp3': SPOKEN_AFTER_FREE,
   'acesso-bloqueado.mp3': SPOKEN_BLOCKED,

@@ -2,8 +2,24 @@ import type { Coach, Diagram } from './services/sinucaCoach.js';
 import type { WhatsAppClient } from './services/whatsapp.js';
 import { MediaError, validateImage, type SupportedMime } from './services/media.js';
 import { MSG_PAID, type Paywall } from './services/paywall.js';
-import { choicePart, choiceText, toSpeech, SPOKEN_AFTER_FREE, SPOKEN_BLOCKED, SPOKEN_PHOTO_WAIT, SPOKEN_WELCOME, type Voice } from './services/voice.js';
+import { choicePart, choiceText, toSpeech, SPOKEN_AFTER_FREE, SPOKEN_BLOCKED, SPOKEN_HOW_TO_PHOTO, SPOKEN_PHOTO_WAIT, SPOKEN_WELCOME, type Voice } from './services/voice.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { errorInfo, logger, maskPhone } from './utils/logger.js';
+
+/** Foto de exemplo (foto-exemplo.png na raiz do GitHub): mostra como tirar a foto da mesa. */
+function loadExamplePhoto(): Uint8Array | null {
+  try {
+    const path = resolve(process.cwd(), 'foto-exemplo.png');
+    if (!existsSync(path)) return null;
+    const bytes = new Uint8Array(readFileSync(path));
+    logger.info('Foto de exemplo carregada', { kb: Math.round(bytes.byteLength / 1024) });
+    return bytes.byteLength > 1000 ? bytes : null;
+  } catch {
+    return null;
+  }
+}
+export const MSG_EXAMPLE_CAPTION = '📸 Assim: de cima, mesa inteira, as 6 caçapas aparecendo.';
 
 export const MSG_TEXT =
   'Fala! 🎱 Sou o treinador de sinuca em fase de testes. Manda uma foto da mesa (de cima, mesa inteira) e depois um áudio 🎤 ou texto contando a situação, que eu te passo as melhores jogadas.';
@@ -61,11 +77,15 @@ export interface ConversationOptions {
   /** Espera antes de responder um texto/áudio sem foto (caso a foto chegue logo depois). 0 = responde na hora. */
   askDelayMs?: number;
   now?: () => number;
+  /** Foto de exemplo (para testes). Padrão: foto-exemplo.png da raiz. */
+  examplePhoto?: Uint8Array | null;
 }
 
 interface Session {
   /** Já recebeu as boas-vindas nesta sessão. */
   greeted?: boolean;
+  /** Já recebeu a foto de exemplo nesta sessão. */
+  exampleSent?: boolean;
   photo?: { bytes: Uint8Array; mime: SupportedMime; at: number };
   situation?: { text: string; at: number };
   pendingAsk?: { timer: ReturnType<typeof setTimeout>; text: string; heard?: string };
@@ -106,6 +126,7 @@ export function createConversations(opts: ConversationOptions = {}) {
   const askDelay = opts.askDelayMs ?? 5_000;
   const now = opts.now ?? Date.now;
   const sessions = new Map<string, Session>();
+  const examplePhoto = opts.examplePhoto !== undefined ? opts.examplePhoto : loadExamplePhoto();
   const queues = new Map<string, Promise<void>>();
 
   const session = (from: string): Session => {
@@ -173,6 +194,17 @@ export function createConversations(opts: ConversationOptions = {}) {
     if (deps.free || welcome || GREETING.test(text)) {
       await safeVoice(deps, to, SPOKEN_WELCOME, true);
       await safeSend(deps.whatsapp, to, deps.free ? MSG_WELCOME_FREE : MSG_WELCOME);
+      // Uma vez por conversa: áudio explicando + foto de exemplo de como tirar a foto da mesa.
+      const s = session(to);
+      if (examplePhoto && !s.exampleSent && deps.whatsapp.sendImage) {
+        s.exampleSent = true;
+        await safeVoice(deps, to, SPOKEN_HOW_TO_PHOTO, true);
+        try {
+          await deps.whatsapp.sendImage(to, examplePhoto, MSG_EXAMPLE_CAPTION);
+        } catch (err) {
+          logger.warn('Não consegui mandar a foto de exemplo', { to: maskPhone(to), ...errorInfo(err) });
+        }
+      }
       return;
     }
     if (!deps.coach.ask) {
