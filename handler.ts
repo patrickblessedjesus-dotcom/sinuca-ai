@@ -38,7 +38,7 @@ const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
 /** Primeira mensagem tipo "oi": responde com as boas-vindas faladas. */
 const GREETING = /^\s*(o+i+e*|ol[aá]+|opa+|ea[eií]+|e a[eií]+|salve+|fala+|bom dia|boa tarde|boa noite|hey|hello|tudo bem|beleza)(?![a-zà-ú])[\s!.,?]*\S{0,20}[\s!.,?]*$/i;
 export const MSG_WELCOME =
-  '🎱 Manda a foto da mesa (de cima, mesa inteira) e um áudio 🎤 contando como tá o jogo, que eu te passo as jogadas.';
+  '🎱 Manda a foto da mesa (de cima, mesa inteira) e um áudio 🎤 contando como tá o jogo, que eu te passo as jogadas.\n\n💬 Ou manda qualquer pergunta de sinuca, por texto ou áudio, que a gente troca ideia: regra, ataque, efeito, como treinar, como sair de sinuca…';
 export const MSG_WELCOME_FREE = `${MSG_WELCOME}\n\nSua 1ª análise é grátis! 🎁`;
 export const MSG_QUESTION =
   '🎱 Qual é a tua maior dificuldade na sinuca? Matar a bola, controlar a branca, sair de sinuca… Me conta rapidinho (texto ou áudio) que eu te dou uma dica grátis.';
