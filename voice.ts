@@ -100,7 +100,11 @@ export function choiceText(analysis: string): string | null {
 
 /** Mensagens faladas com a voz do Felipinho (ficam em cache: o ElevenLabs só cobra a primeira vez). */
 export const SPOKEN_WELCOME =
-  'E aí, meu parceiro! Aqui é o Felipinho, o rei da puxadinha. Manda a foto da mesa aí, que a gente vê o que tá acontecendo.';
+  'E aí, meu parceiro! Aqui é o Felipinho, o rei da puxadinha. Tamo junto!';
+export const SPOKEN_QUESTION =
+  'Me conta aí: qual é a tua maior dificuldade na sinuca hoje? É matar a bola, controlar a branca, sair de sinuca? Fala rapidinho que eu te dou uma dica.';
+export const SPOKEN_PHOTO_LOCKED =
+  'Opa! A leitura da mesa com as jogadas é só pra quem é assinante. Mas antes te dou uma dica de graça: me conta qual é a tua maior dificuldade na sinuca.';
 export const SPOKEN_HOW_TO_PHOTO =
   'Ó, tira a foto assim: de cima, pegando a mesa inteira, com as seis caçapas aparecendo, igual essa aqui.';
 export const SPOKEN_PHOTO_WAIT =
@@ -114,6 +118,8 @@ export const SPOKEN_PAID = 'Pagamento confirmado, tá liberado! Agora manda a fo
 const RECORDED: Record<string, string> = {
   'boas-vindas.mp3': SPOKEN_WELCOME,
   'como-tirar-foto.mp3': SPOKEN_HOW_TO_PHOTO,
+  'pergunta-dificuldade.mp3': SPOKEN_QUESTION,
+  'foto-so-assinante.mp3': SPOKEN_PHOTO_LOCKED,
   'foto-recebida.mp3': SPOKEN_PHOTO_WAIT,
   'analise-gratis.mp3': SPOKEN_AFTER_FREE,
   'acesso-bloqueado.mp3': SPOKEN_BLOCKED,

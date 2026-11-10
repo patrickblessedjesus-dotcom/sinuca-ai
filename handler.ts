@@ -2,13 +2,13 @@ import type { Coach, Diagram } from './services/sinucaCoach.js';
 import type { WhatsAppClient } from './services/whatsapp.js';
 import { MediaError, validateImage, type SupportedMime } from './services/media.js';
 import { MSG_PAID, type Paywall } from './services/paywall.js';
-import { choicePart, choiceText, toSpeech, SPOKEN_AFTER_FREE, SPOKEN_BLOCKED, SPOKEN_HOW_TO_PHOTO, SPOKEN_PHOTO_WAIT, SPOKEN_WELCOME, type Voice } from './services/voice.js';
+import { choicePart, choiceText, toSpeech, SPOKEN_AFTER_FREE, SPOKEN_BLOCKED, SPOKEN_HOW_TO_PHOTO, SPOKEN_PHOTO_LOCKED, SPOKEN_QUESTION, SPOKEN_PHOTO_WAIT, SPOKEN_WELCOME, type Voice } from './services/voice.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { errorInfo, logger, maskPhone } from './utils/logger.js';
 
 /** Foto de exemplo (foto-exemplo.png na raiz do GitHub): mostra como tirar a foto da mesa. */
-function loadExamplePhoto(): Uint8Array | null {
+export function loadExamplePhoto(): Uint8Array | null {
   try {
     const path = resolve(process.cwd(), 'foto-exemplo.png');
     if (!existsSync(path)) return null;
@@ -40,6 +40,16 @@ const GREETING = /^\s*(o+i+e*|ol[aá]+|opa+|ea[eií]+|e a[eií]+|salve+|fala+|bo
 export const MSG_WELCOME =
   '🎱 Manda a foto da mesa (de cima, mesa inteira) e um áudio 🎤 contando como tá o jogo, que eu te passo as jogadas.';
 export const MSG_WELCOME_FREE = `${MSG_WELCOME}\n\nSua 1ª análise é grátis! 🎁`;
+export const MSG_QUESTION =
+  '🎱 Qual é a tua maior dificuldade na sinuca? Matar a bola, controlar a branca, sair de sinuca… Me conta rapidinho (texto ou áudio) que eu te dou uma dica grátis.';
+export const MSG_PHOTO_LOCKED =
+  '📸 A leitura da mesa com as jogadas é só pra assinante. Antes, ganha uma dica grátis: me conta tua maior dificuldade na sinuca (texto ou áudio).';
+
+/** Pergunta para a IA dar a dica grátis sobre a dificuldade que o jogador contou. */
+function freeTipPrompt(text: string): string {
+  return `O jogador ainda NÃO é assinante e está testando. Ele contou qual é a maior dificuldade dele na sinuca: "${text.slice(0, 1200)}".
+Responda como o Felipinho, em primeira pessoa, falando com ele: dê UMA dica prática e certeira pra essa dificuldade (o que fazer na próxima partida), em no máximo cerca de 60 palavras. Se ele não falou de uma dificuldade de sinuca, dê uma dica rápida de controle da branca. Termine com uma frase curta dizendo que, assinando, é só mandar a foto da mesa que você mostra a jogada certa na hora.`;
+}
 const ONLY_TABLE = /^\s*(analisa|analise|analisar|vai|bora|s[oó] a mesa|l[eê] a mesa)\b/i;
 
 export interface IncomingMessage {
@@ -86,6 +96,8 @@ interface Session {
   greeted?: boolean;
   /** Já recebeu a foto de exemplo nesta sessão. */
   exampleSent?: boolean;
+  /** Já ouviu a pergunta da maior dificuldade. */
+  questionSent?: boolean;
   photo?: { bytes: Uint8Array; mime: SupportedMime; at: number };
   situation?: { text: string; at: number };
   pendingAsk?: { timer: ReturnType<typeof setTimeout>; text: string; heard?: string };
@@ -191,9 +203,35 @@ export function createConversations(opts: ConversationOptions = {}) {
 
   async function answer(to: string, text: string, heard: string | undefined, deps: HandlerDeps, welcome = false) {
     // Boas-vindas faladas no "oi" (e pra quem ainda está na análise grátis).
+    // Teste grátis sem foto: a pessoa contou a dificuldade dela → uma dica em áudio, e aí o link.
+    if (deps.free && !welcome && !GREETING.test(text) && deps.coach.ask && deps.paywall) {
+      try {
+        const started = now();
+        const tip = await deps.coach.ask(freeTipPrompt(text));
+        logger.info('Dica grátis respondida', { to: maskPhone(to), ms: now() - started });
+        if (!(await safeVoice(deps, to, toSpeech(tip)))) await safeSend(deps.whatsapp, to, heardPrefix(heard) + tip);
+        deps.paywall.useFree(to);
+        await safeVoice(deps, to, SPOKEN_AFTER_FREE, true);
+        await safeSend(deps.whatsapp, to, await deps.paywall.payMessage(to));
+      } catch (err) {
+        logger.error('Falha na dica grátis', { to: maskPhone(to), ...errorInfo(err) });
+        await safeSend(deps.whatsapp, to, MSG_QUESTION);
+      }
+      return;
+    }
     if (deps.free || welcome || GREETING.test(text)) {
       await safeVoice(deps, to, SPOKEN_WELCOME, true);
-      await safeSend(deps.whatsapp, to, deps.free ? MSG_WELCOME_FREE : MSG_WELCOME);
+      if (deps.free) {
+        // Quem ainda não pagou: pergunta a maior dificuldade (dá pra testar sem estar na mesa).
+        const s = session(to);
+        if (!s.questionSent) {
+          s.questionSent = true;
+          await safeVoice(deps, to, SPOKEN_QUESTION, true);
+        }
+        await safeSend(deps.whatsapp, to, MSG_QUESTION);
+        return;
+      }
+      await safeSend(deps.whatsapp, to, MSG_WELCOME);
       // Uma vez por conversa: áudio explicando + foto de exemplo de como tirar a foto da mesa.
       const s = session(to);
       if (examplePhoto && !s.exampleSent && deps.whatsapp.sendImage) {
@@ -291,6 +329,15 @@ export function createConversations(opts: ConversationOptions = {}) {
         return;
       }
       deps = { ...baseDeps, free: access === 'free' };
+      // Teste grátis é só a dica: a leitura da mesa (foto) é só pra assinante.
+      if (access === 'free' && msg.type === 'image') {
+        await safeVoice(baseDeps, to, SPOKEN_PHOTO_LOCKED, true);
+        await safeSend(baseDeps.whatsapp, to, MSG_PHOTO_LOCKED);
+        const s = session(to);
+        s.questionSent = true;
+        s.greeted = true;
+        return;
+      }
       // Plano Só Texto: sem áudio com a voz.
       const planOf = (baseDeps.paywall as Paywall & { plan?: (phone: string) => Promise<string | null> }).plan;
       if (access === 'paid' && planOf && deps.voice) {
