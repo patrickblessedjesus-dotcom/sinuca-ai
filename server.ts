@@ -46,18 +46,19 @@ function createRemarketingRouter(o: RemarketingOptions) {
   const zapiHeaders: Record<string, string> = o.clientToken ? { 'Client-Token': o.clientToken } : {};
   const state = { running: false, stop: false, total: 0, done: 0, skipped: 0, failed: 0, startedAt: 0 };
   const sent = new Set<string>();
-  const recorded = (() => {
-    const path = resolve(process.cwd(), 'remarketing.mp3');
+  /** Áudios gravados pelo Felipinho, mandados nessa ordem. Sem nenhum: usa a voz clonada. */
+  const recorded = ['remarketing-1.mp3', 'remarketing-2.mp3', 'remarketing-3.mp3'].flatMap((file) => {
     try {
-      if (existsSync(path)) {
-        const b = new Uint8Array(readFileSync(path));
-        if (b.byteLength > 1000) return b;
-      }
+      const path = resolve(process.cwd(), file);
+      if (!existsSync(path)) return [];
+      const b = new Uint8Array(readFileSync(path));
+      if (b.byteLength <= 1000) return [];
+      logger.info('Áudio de remarketing carregado', { file, kb: Math.round(b.byteLength / 1024) });
+      return [b];
     } catch {
-      /* sem arquivo: usa a voz clonada */
+      return [];
     }
-    return null;
-  })();
+  });
 
   const okToken = (given: unknown) => {
     const a = Buffer.from(String(given ?? ''));
@@ -110,8 +111,8 @@ function createRemarketingRouter(o: RemarketingOptions) {
   async function sendOne(phone: string) {
     if (o.client.sendAudio) {
       try {
-        const mp3 = recorded ?? (o.voice ? await o.voice.speak(toSpeech(REMARKETING_TEXT), { cache: true }) : null);
-        if (mp3) await o.client.sendAudio(phone, mp3);
+        const audios = recorded.length ? recorded : o.voice ? [await o.voice.speak(toSpeech(REMARKETING_TEXT), { cache: true })] : [];
+        for (const mp3 of audios) await o.client.sendAudio(phone, mp3);
       } catch (err) {
         logger.warn('Remarketing: não consegui mandar o áudio', { to: maskPhone(phone), ...errorInfo(err) });
       }
