@@ -324,6 +324,12 @@ export function createConversations(opts: ConversationOptions = {}) {
         access = await baseDeps.paywall.check(to);
       }
       if (access === 'blocked') {
+        // Sem teste grátis: na primeira mensagem, boas-vindas faladas antes do áudio do link.
+        const s = session(to);
+        if (!s.greeted) {
+          s.greeted = true;
+          await safeVoice(baseDeps, to, SPOKEN_WELCOME, true);
+        }
         await safeVoice(baseDeps, to, SPOKEN_BLOCKED, true);
         await safeSend(baseDeps.whatsapp, to, await baseDeps.paywall.payMessage(to));
         return;
